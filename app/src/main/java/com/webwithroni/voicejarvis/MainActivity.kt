@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 class MainActivity : AppCompatActivity() {
 
     private val micPermissionCode = 100
+    private var recognizer: VoiceRecognizer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,14 +30,34 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (ModelManager.isModelReady(this)) {
-            statusText.text = "Model ready. Voice Jarvis is alive."
+            statusText.text = "Listening..."
+            startRecognition(statusText)
         } else {
             statusText.text = "Preparing model..."
             ModelManager.downloadAndExtract(
                 this,
                 onProgress = { msg -> runOnUiThread { statusText.text = msg } },
-                onDone = { runOnUiThread { statusText.text = "Model ready. Restart to activate." } }
+                onDone = {
+                    runOnUiThread {
+                        statusText.text = "Listening..."
+                        startRecognition(statusText)
+                    }
+                }
             )
         }
+    }
+
+    private fun startRecognition(statusText: TextView) {
+        recognizer = VoiceRecognizer(
+            context = this,
+            onPartialResult = { text -> runOnUiThread { statusText.text = text } },
+            onFinalResult = { text -> runOnUiThread { statusText.text = "You said: $text" } }
+        )
+        recognizer?.start()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        recognizer?.stop()
     }
 }
