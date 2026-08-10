@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.VoiceJarvis" parent="Theme.MaterialComponents.DayNight.NoActionBar" />
+</resources>
