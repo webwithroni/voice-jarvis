@@ -50,8 +50,12 @@ class OrbView @JvmOverloads constructor(
         applyState(newState)
     }
 
+    private var smoothedAmplitude = 0f
+
     fun setAmplitude(value: Float) {
-        amplitude = value.coerceIn(0f, 1f)
+        val gated = if (value < 0.15f) 0f else value
+        smoothedAmplitude = smoothedAmplitude * 0.7f + gated * 0.3f
+        amplitude = smoothedAmplitude.coerceIn(0f, 1f)
         invalidate()
     }
 
