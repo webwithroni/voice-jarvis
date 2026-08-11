@@ -16,9 +16,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashLogger.install(this)
         setContentView(R.layout.activity_main)
 
         val statusText = findViewById<TextView>(R.id.statusText)
+        statusText.text = "Previous crash log:\n" + CrashLogger.readLog(this) + "\n\n---\n\n"
         statusText.setTextIsSelectable(true)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
