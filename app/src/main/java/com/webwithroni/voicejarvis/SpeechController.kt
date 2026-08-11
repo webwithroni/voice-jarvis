@@ -9,6 +9,8 @@ import android.speech.SpeechRecognizer
 
 class SpeechController(
     private val context: Context,
+    private val onSpeechBegin: () -> Unit,
+    private val onAmplitude: (Float) -> Unit,
     private val onFinalResult: (String) -> Unit,
     private val onError: (String) -> Unit,
     private val onListeningStateChanged: (Boolean) -> Unit
@@ -16,16 +18,13 @@ class SpeechController(
     private var recognizer: SpeechRecognizer? = null
     private var language = "hi-IN"
 
-    fun setLanguage(locale: String) {
-        language = locale
-    }
+    fun setLanguage(locale: String) { language = locale }
 
     fun startListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             onError("Speech recognition not available on this device")
             return
         }
-
         recognizer?.destroy()
         recognizer = SpeechRecognizer.createSpeechRecognizer(context)
 
@@ -37,17 +36,17 @@ class SpeechController(
         }
 
         recognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {
-                onListeningStateChanged(true)
+            override fun onReadyForSpeech(params: Bundle?) { onListeningStateChanged(true) }
+            override fun onBeginningOfSpeech() { onSpeechBegin() }
+            override fun onRmsChanged(rmsdB: Float) {
+                onAmplitude(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
             }
-
             override fun onResults(results: Bundle?) {
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val text = matches?.firstOrNull()
                 onListeningStateChanged(false)
                 if (!text.isNullOrBlank()) onFinalResult(text) else onError("No speech detected")
             }
-
             override fun onError(error: Int) {
                 onListeningStateChanged(false)
                 val msg = when (error) {
@@ -61,11 +60,8 @@ class SpeechController(
                 }
                 onError(msg)
             }
-
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() { onListeningStateChanged(false) }
+            override fun onEndOfSpeech() {}
             override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })

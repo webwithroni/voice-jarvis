@@ -1,0 +1,21 @@
+<resources>
+    <dimen name="space_4">4dp</dimen>
+    <dimen name="space_8">8dp</dimen>
+    <dimen name="space_12">12dp</dimen>
+    <dimen name="space_16">16dp</dimen>
+    <dimen name="space_20">20dp</dimen>
+    <dimen name="space_24">24dp</dimen>
+    <dimen name="space_32">32dp</dimen>
+    <dimen name="space_40">40dp</dimen>
+    <dimen name="space_48">48dp</dimen>
+    <dimen name="space_64">64dp</dimen>
+    <dimen name="space_80">80dp</dimen>
+    <dimen name="radius_small">10dp</dimen>
+    <dimen name="radius_medium">16dp</dimen>
+    <dimen name="radius_large">24dp</dimen>
+    <dimen name="touch_target_min">48dp</dimen>
+    <dimen name="orb_size_default">240dp</dimen>
+    <dimen name="orb_core">112dp</dimen>
+    <dimen name="orb_ring">176dp</dimen>
+    <dimen name="orb_atmosphere">240dp</dimen>
+</resources>

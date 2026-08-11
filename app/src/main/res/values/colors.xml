@@ -1,0 +1,13 @@
+<resources>
+    <color name="bg_canvas">#07090D</color>
+    <color name="bg_surface">#0D1118</color>
+    <color name="bg_surface_elevated">#121821</color>
+    <color name="text_primary">#F4F7FB</color>
+    <color name="text_secondary">#8C97A8</color>
+    <color name="text_tertiary">#566171</color>
+    <color name="accent_cyan">#5CE7FF</color>
+    <color name="accent_blue">#4A8DFF</color>
+    <color name="accent_violet">#9B7CFF</color>
+    <color name="state_error">#FF7181</color>
+    <color name="state_muted">#414A58</color>
+</resources>

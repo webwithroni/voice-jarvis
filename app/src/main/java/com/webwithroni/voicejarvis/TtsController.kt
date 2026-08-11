@@ -32,6 +32,10 @@ class TtsController(
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis_utterance")
     }
 
+    fun stop() {
+        tts?.stop()
+    }
+
     fun shutdown() {
         tts?.stop()
         tts?.shutdown()
