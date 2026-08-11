@@ -7,72 +7,64 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
     private val micPermissionCode = 100
-    private var recognizer: VoiceRecognizer? = null
+    private lateinit var statusText: TextView
+    private lateinit var speech: SpeechController
+    private lateinit var tts: TtsController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashLogger.install(this)
         setContentView(R.layout.activity_main)
 
-        val statusText = findViewById<TextView>(R.id.statusText)
-        statusText.text = "Previous crash log:\n" + CrashLogger.readLog(this) + "\n\n---\n\n"
+        statusText = findViewById(R.id.statusText)
         statusText.setTextIsSelectable(true)
+        statusText.text = "Previous crash log:\n" + CrashLogger.readLog(this) + "\n\n---\n\n"
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                micPermissionCode
-            )
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), micPermissionCode)
         }
 
-        try {
-            if (ModelManager.isModelReady(this)) {
-                checkModelStructureAndStart(statusText)
-            } else {
-                statusText.text = "Preparing model..."
-                ModelManager.downloadAndExtract(
-                    this,
-                    onProgress = { msg -> runOnUiThread { statusText.text = msg } },
-                    onDone = {
-                        runOnUiThread {
-                            checkModelStructureAndStart(statusText)
-                        }
-                    }
-                )
-            }
-        } catch (e: Throwable) {
-            statusText.text = "Outer crash: ${e.javaClass.simpleName}: ${e.message}"
-        }
-    }
-
-    private fun checkModelStructureAndStart(statusText: TextView) {
-        val modelDir = File(ModelManager.getModelPath(this))
-        val contents = modelDir.listFiles()?.joinToString(", ") { it.name } ?: "EMPTY"
-        statusText.text = "Model folder: $contents\n\n"
-        startRecognition(statusText)
-    }
-
-    private fun startRecognition(statusText: TextView) {
-        recognizer = VoiceRecognizer(
+        tts = TtsController(
             context = this,
-            onPartialResult = { text -> runOnUiThread { statusText.text = text } },
-            onFinalResult = { text -> runOnUiThread { statusText.text = "You said: $text" } },
-            onError = { msg -> runOnUiThread { statusText.append("\n$msg") } },
-            onStep = { msg -> runOnUiThread { statusText.append("\n$msg") } }
+            onSpeakStart = { runOnUiThread { statusText.append("\nSpeaking...") } },
+            onSpeakDone = { runOnUiThread { statusText.append("\nListening again...") }; startListening() }
         )
-        recognizer?.start()
+
+        speech = SpeechController(
+            context = this,
+            onFinalResult = { text -> handleUserSpeech(text) },
+            onError = { msg -> runOnUiThread { statusText.append("\n$msg") }; startListening() },
+            onListeningStateChanged = { listening -> if (listening) runOnUiThread { statusText.append("\nListening...") } }
+        )
+
+        startListening()
+    }
+
+    private fun startListening() {
+        speech.startListening()
+    }
+
+    private fun handleUserSpeech(text: String) {
+        runOnUiThread { statusText.append("\nYou: $text\nThinking...") }
+        GroqClient.ask(
+            userText = text,
+            onResult = { reply ->
+                runOnUiThread { statusText.append("\nJarvis: $reply") }
+                tts.speak(reply)
+            },
+            onError = { err -> runOnUiThread { statusText.append("\n$err") }; startListening() }
+        )
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        recognizer?.stop()
+        speech.stop()
+        tts.shutdown()
     }
 }
