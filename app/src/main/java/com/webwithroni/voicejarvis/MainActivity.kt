@@ -53,8 +53,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkModelStructureAndStart(statusText: TextView) {
         val modelDir = File(ModelManager.getModelPath(this))
-        val contents = modelDir.listFiles()?.joinToString("\n") { it.name } ?: "EMPTY"
-        statusText.text = "Model folder contents:\n$contents\n\nStarting recognizer..."
+        val contents = modelDir.listFiles()?.joinToString(", ") { it.name } ?: "EMPTY"
+        statusText.text = "Model folder: $contents\n\n"
         startRecognition(statusText)
     }
 
@@ -63,7 +63,8 @@ class MainActivity : AppCompatActivity() {
             context = this,
             onPartialResult = { text -> runOnUiThread { statusText.text = text } },
             onFinalResult = { text -> runOnUiThread { statusText.text = "You said: $text" } },
-            onError = { msg -> runOnUiThread { statusText.text = msg } }
+            onError = { msg -> runOnUiThread { statusText.append("\n$msg") } },
+            onStep = { msg -> runOnUiThread { statusText.append("\n$msg") } }
         )
         recognizer?.start()
     }

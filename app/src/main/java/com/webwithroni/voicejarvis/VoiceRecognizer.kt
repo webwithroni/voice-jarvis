@@ -11,18 +11,27 @@ class VoiceRecognizer(
     private val context: Context,
     private val onPartialResult: (String) -> Unit,
     private val onFinalResult: (String) -> Unit,
-    private val onError: (String) -> Unit
+    private val onError: (String) -> Unit,
+    private val onStep: (String) -> Unit
 ) {
     private var model: Model? = null
     private var speechService: SpeechService? = null
 
     fun start() {
         try {
+            onStep("Step 1: Getting model path...")
             val modelPath = ModelManager.getModelPath(context)
+
+            onStep("Step 2: Loading Model(path)...")
             model = Model(modelPath)
+
+            onStep("Step 3: Model loaded OK. Creating Recognizer...")
             val recognizer = Recognizer(model, 16000.0f)
 
+            onStep("Step 4: Recognizer created OK. Creating SpeechService...")
             speechService = SpeechService(recognizer, 16000.0f)
+
+            onStep("Step 5: SpeechService created OK. Starting listening...")
             speechService?.startListening(object : RecognitionListener {
                 override fun onPartialResult(hypothesis: String?) {
                     hypothesis?.let { onPartialResult(it) }
@@ -46,6 +55,8 @@ class VoiceRecognizer(
                     Log.d("VoiceRecognizer", "Timeout")
                 }
             })
+
+            onStep("Step 6: startListening() called OK. All steps passed.")
         } catch (e: Throwable) {
             val msg = "Init crash: ${e.javaClass.simpleName}: ${e.message}\n${e.stackTrace.take(5).joinToString("\n")}"
             Log.e("VoiceRecognizer", msg, e)
