@@ -3,6 +3,8 @@ package com.webwithroni.voicejarvis
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -14,6 +16,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var speech: SpeechController
     private lateinit var tts: TtsController
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,7 +25,7 @@ class MainActivity : AppCompatActivity() {
 
         statusText = findViewById(R.id.statusText)
         statusText.setTextIsSelectable(true)
-        statusText.text = "Previous crash log:\n" + CrashLogger.readLog(this) + "\n\n---\n\n"
+        statusText.text = ""
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
@@ -33,13 +36,19 @@ class MainActivity : AppCompatActivity() {
         tts = TtsController(
             context = this,
             onSpeakStart = { runOnUiThread { statusText.append("\nSpeaking...") } },
-            onSpeakDone = { runOnUiThread { statusText.append("\nListening again...") }; startListening() }
+            onSpeakDone = {
+                runOnUiThread { statusText.append("\nListening again...") }
+                handler.postDelayed({ startListening() }, 800)
+            }
         )
 
         speech = SpeechController(
             context = this,
             onFinalResult = { text -> handleUserSpeech(text) },
-            onError = { msg -> runOnUiThread { statusText.append("\n$msg") }; startListening() },
+            onError = { msg ->
+                runOnUiThread { statusText.append("\n$msg") }
+                handler.postDelayed({ startListening() }, 800)
+            },
             onListeningStateChanged = { listening -> if (listening) runOnUiThread { statusText.append("\nListening...") } }
         )
 
@@ -58,12 +67,16 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { statusText.append("\nJarvis: $reply") }
                 tts.speak(reply)
             },
-            onError = { err -> runOnUiThread { statusText.append("\n$err") }; startListening() }
+            onError = { err ->
+                runOnUiThread { statusText.append("\n$err") }
+                handler.postDelayed({ startListening() }, 800)
+            }
         )
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        handler.removeCallbacksAndMessages(null)
         speech.stop()
         tts.shutdown()
     }
