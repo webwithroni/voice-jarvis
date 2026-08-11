@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         val statusText = findViewById<TextView>(R.id.statusText)
+        statusText.setTextIsSelectable(true)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
@@ -29,21 +30,25 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        if (ModelManager.isModelReady(this)) {
-            statusText.text = "Listening..."
-            startRecognition(statusText)
-        } else {
-            statusText.text = "Preparing model..."
-            ModelManager.downloadAndExtract(
-                this,
-                onProgress = { msg -> runOnUiThread { statusText.text = msg } },
-                onDone = {
-                    runOnUiThread {
-                        statusText.text = "Listening..."
-                        startRecognition(statusText)
+        try {
+            if (ModelManager.isModelReady(this)) {
+                statusText.text = "Listening..."
+                startRecognition(statusText)
+            } else {
+                statusText.text = "Preparing model..."
+                ModelManager.downloadAndExtract(
+                    this,
+                    onProgress = { msg -> runOnUiThread { statusText.text = msg } },
+                    onDone = {
+                        runOnUiThread {
+                            statusText.text = "Listening..."
+                            startRecognition(statusText)
+                        }
                     }
-                }
-            )
+                )
+            }
+        } catch (e: Throwable) {
+            statusText.text = "Outer crash: ${e.javaClass.simpleName}: ${e.message}"
         }
     }
 
@@ -51,7 +56,8 @@ class MainActivity : AppCompatActivity() {
         recognizer = VoiceRecognizer(
             context = this,
             onPartialResult = { text -> runOnUiThread { statusText.text = text } },
-            onFinalResult = { text -> runOnUiThread { statusText.text = "You said: $text" } }
+            onFinalResult = { text -> runOnUiThread { statusText.text = "You said: $text" } },
+            onError = { msg -> runOnUiThread { statusText.text = msg } }
         )
         recognizer?.start()
     }
