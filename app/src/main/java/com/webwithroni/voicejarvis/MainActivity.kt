@@ -7,6 +7,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -32,8 +33,7 @@ class MainActivity : AppCompatActivity() {
 
         try {
             if (ModelManager.isModelReady(this)) {
-                statusText.text = "Listening..."
-                startRecognition(statusText)
+                checkModelStructureAndStart(statusText)
             } else {
                 statusText.text = "Preparing model..."
                 ModelManager.downloadAndExtract(
@@ -41,8 +41,7 @@ class MainActivity : AppCompatActivity() {
                     onProgress = { msg -> runOnUiThread { statusText.text = msg } },
                     onDone = {
                         runOnUiThread {
-                            statusText.text = "Listening..."
-                            startRecognition(statusText)
+                            checkModelStructureAndStart(statusText)
                         }
                     }
                 )
@@ -50,6 +49,13 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             statusText.text = "Outer crash: ${e.javaClass.simpleName}: ${e.message}"
         }
+    }
+
+    private fun checkModelStructureAndStart(statusText: TextView) {
+        val modelDir = File(ModelManager.getModelPath(this))
+        val contents = modelDir.listFiles()?.joinToString("\n") { it.name } ?: "EMPTY"
+        statusText.text = "Model folder contents:\n$contents\n\nStarting recognizer..."
+        startRecognition(statusText)
     }
 
     private fun startRecognition(statusText: TextView) {
