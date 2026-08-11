@@ -1,8 +1,31 @@
 <resources>
-    <style name="Type.Display"><item name="android:textSize">32sp</item><item name="android:textStyle">bold</item><item name="android:textColor">@color/text_primary</item></style>
-    <style name="Type.Title"><item name="android:textSize">24sp</item><item name="android:textStyle">bold</item><item name="android:textColor">@color/text_primary</item></style>
-    <style name="Type.Heading"><item name="android:textSize">18sp</item><item name="android:textStyle">bold</item><item name="android:textColor">@color/text_primary</item></style>
-    <style name="Type.Body"><item name="android:textSize">16sp</item><item name="android:textColor">@color/text_primary</item></style>
-    <style name="Type.Label"><item name="android:textSize">14sp</item><item name="android:textStyle">bold</item><item name="android:textColor">@color/text_secondary</item><item name="android:letterSpacing">0.08</item></style>
-    <style name="Type.Caption"><item name="android:textSize">12sp</item><item name="android:textColor">@color/text_tertiary</item></style>
+    <style name="Type.Display" parent="">
+        <item name="android:textSize">32sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+    <style name="Type.Title" parent="">
+        <item name="android:textSize">24sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+    <style name="Type.Heading" parent="">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+    <style name="Type.Body" parent="">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+    <style name="Type.Label" parent="">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+    <style name="Type.Caption" parent="">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/text_tertiary</item>
+    </style>
 </resources>
