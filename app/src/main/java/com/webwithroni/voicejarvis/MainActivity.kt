@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
 
     private var isPaused = false
+    private var autoPausedByLifecycle = false
     private var debugVisible = false
     private var voiceActive = false
     private var noMoreAudioIncoming = true
@@ -61,7 +62,14 @@ class MainActivity : AppCompatActivity() {
         statusText.setTextIsSelectable(true)
         statusText.text = ""
 
-        muteIcon.setOnClickListener { toggleMute() }
+        muteIcon.isClickable = true
+        muteIcon.isFocusable = true
+        muteIcon.setOnClickListener {
+            Toast.makeText(this, "Mute tapped", Toast.LENGTH_SHORT).show()
+            toggleMute()
+        }
+        muteLabel.setOnClickListener { muteIcon.performClick() }
+
         findViewById<View>(R.id.settingsButton).setOnClickListener {
             Toast.makeText(this, "Settings — coming soon", Toast.LENGTH_SHORT).show()
         }
@@ -99,7 +107,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == micPermissionCode && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+        val micIndex = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
+        val micGranted = micIndex != -1 && grantResults.getOrNull(micIndex) == PackageManager.PERMISSION_GRANTED
+        if (requestCode == micPermissionCode && micGranted) {
             connectGemini()
         } else if (requestCode == micPermissionCode) {
             setJarvisState(JarvisState.ERROR, "TRY AGAIN", "Microphone access is needed to listen.")
@@ -129,14 +139,14 @@ class MainActivity : AppCompatActivity() {
                     log("Gemini Live connected.")
                     audioEngine.startRecording()
                     audioEngine.startPlayback()
-                    setJarvisState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
+                    if (!isPaused) setJarvisState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
                 }
             },
             onAudioChunk = { bytes ->
                 noMoreAudioIncoming = false
                 audioEngine.micSendEnabled = false
                 audioEngine.enqueuePlayback(bytes)
-                runOnUiThread { setJarvisState(JarvisState.SPEAKING, "SPEAKING", "") }
+                runOnUiThread { if (!isPaused) setJarvisState(JarvisState.SPEAKING, "SPEAKING", "") }
             },
             onInputTranscript = { text ->
                 pendingUserText += text
@@ -231,6 +241,23 @@ class MainActivity : AppCompatActivity() {
             audioEngine.micSendEnabled = true
             muteLabel.text = "MUTE"
             muteIcon.setImageResource(android.R.drawable.ic_lock_silent_mode)
+            setJarvisState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (!isPaused) {
+            autoPausedByLifecycle = true
+            audioEngine.micSendEnabled = false
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (autoPausedByLifecycle && !isPaused) {
+            autoPausedByLifecycle = false
+            audioEngine.micSendEnabled = true
             setJarvisState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
         }
     }
