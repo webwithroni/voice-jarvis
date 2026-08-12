@@ -12,7 +12,9 @@ import android.util.AttributeSet
 import android.view.View
 import android.view.animation.LinearInterpolator
 import androidx.core.graphics.ColorUtils
+import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.sin
 
 class OrbView @JvmOverloads constructor(
     context: Context,
@@ -41,6 +43,8 @@ class OrbView @JvmOverloads constructor(
     private var thinkAnimator: ValueAnimator? = null
     private var errorAnimator: ValueAnimator? = null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val particlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val particleCount = 60
 
     init { applyState(JarvisState.LISTENING) }
 
@@ -50,12 +54,9 @@ class OrbView @JvmOverloads constructor(
         applyState(newState)
     }
 
-    private var smoothedAmplitude = 0f
-
     fun setAmplitude(value: Float) {
         val gated = if (value < 0.15f) 0f else value
-        smoothedAmplitude = smoothedAmplitude * 0.7f + gated * 0.3f
-        amplitude = smoothedAmplitude.coerceIn(0f, 1f)
+        amplitude = (amplitude * 0.7f + gated * 0.3f).coerceIn(0f, 1f)
         invalidate()
     }
 
@@ -143,6 +144,10 @@ class OrbView @JvmOverloads constructor(
         canvas.drawCircle(cx, cy, ringRadius, paint)
         paint.style = Paint.Style.FILL
 
+        if (state != JarvisState.PAUSED) {
+            drawParticleField(canvas, cx, cy, baseRadius, scale, coreColor)
+        }
+
         val fieldRadius = baseRadius * 0.55f * scale
         paint.shader = RadialGradient(cx, cy, fieldRadius,
             ColorUtils.setAlphaComponent(coreColor, if (state == JarvisState.PAUSED) 25 else 150),
@@ -153,6 +158,20 @@ class OrbView @JvmOverloads constructor(
         paint.shader = null
         paint.color = coreColor
         canvas.drawCircle(cx, cy, coreRadius, paint)
+    }
+
+    private fun drawParticleField(canvas: Canvas, cx: Float, cy: Float, baseRadius: Float, scale: Float, color: Int) {
+        particlePaint.color = ColorUtils.setAlphaComponent(color, 140)
+        val ringRadius = baseRadius * 0.66f * scale
+        val t = System.currentTimeMillis() / 320.0
+        for (i in 0 until particleCount) {
+            val angle = 2 * Math.PI * i / particleCount
+            val jitter = 0.05f * sin(t + i * 0.35).toFloat() + 0.03f * sin(t * 1.7 + i).toFloat()
+            val r = ringRadius * (1f + jitter * (0.6f + amplitude))
+            val x = cx + (r * cos(angle)).toFloat()
+            val y = cy + (r * sin(angle)).toFloat()
+            canvas.drawCircle(x, y, 1.6f, particlePaint)
+        }
     }
 
     override fun onDetachedFromWindow() {

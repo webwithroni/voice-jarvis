@@ -6,20 +6,29 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.provider.Settings
 import android.view.View
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
     private val permissionCode = 100
+    private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
 
     private lateinit var statusText: TextView
     private lateinit var stateLabel: TextView
@@ -27,14 +36,36 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     private lateinit var muteIcon: ImageView
     private lateinit var muteLabel: TextView
     private lateinit var orb: OrbView
+    private lateinit var orbCenterIcon: ImageView
+    private lateinit var waveformLeft: WaveformBarsView
+    private lateinit var waveformRight: WaveformBarsView
     private lateinit var conversationCard: View
+    private lateinit var userBlock: View
+    private lateinit var jarvisBlock: View
     private lateinit var userBubble: TextView
     private lateinit var jarvisBubble: TextView
+    private lateinit var userTime: TextView
+    private lateinit var jarvisTime: TextView
     private lateinit var debugScroll: View
+    private lateinit var pausedCard: View
+    private lateinit var tipsCard: View
+    private lateinit var thinkingCard: View
+    private lateinit var currentRequestText: TextView
+    private lateinit var processStep0: TextView
+    private lateinit var processStep1: TextView
+    private lateinit var processStep2: TextView
+    private lateinit var permissionCard: View
+    private lateinit var enableMicButton: Button
 
     private var service: JarvisService? = null
     private var bound = false
     private var debugVisible = false
+    private var micPermanentlyDenied = false
+    private var lastUserTextCache: String = ""
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var thinkingStepIndex = 0
+    private var thinkingRunnable: Runnable? = null
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -69,14 +100,39 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         muteIcon = findViewById(R.id.muteIcon)
         muteLabel = findViewById(R.id.muteLabel)
         orb = findViewById(R.id.orbView)
+        orbCenterIcon = findViewById(R.id.orbCenterIcon)
+        waveformLeft = findViewById(R.id.waveformLeft)
+        waveformRight = findViewById(R.id.waveformRight)
         conversationCard = findViewById(R.id.conversationCard)
+        userBlock = findViewById(R.id.userBlock)
+        jarvisBlock = findViewById(R.id.jarvisBlock)
         userBubble = findViewById(R.id.userBubble)
         jarvisBubble = findViewById(R.id.jarvisBubble)
+        userTime = findViewById(R.id.userTime)
+        jarvisTime = findViewById(R.id.jarvisTime)
         debugScroll = findViewById(R.id.debugScroll)
+        pausedCard = findViewById(R.id.pausedCard)
+        tipsCard = findViewById(R.id.tipsCard)
+        thinkingCard = findViewById(R.id.thinkingCard)
+        currentRequestText = findViewById(R.id.currentRequestText)
+        processStep0 = findViewById(R.id.processStep0)
+        processStep1 = findViewById(R.id.processStep1)
+        processStep2 = findViewById(R.id.processStep2)
+        permissionCard = findViewById(R.id.permissionCard)
+        enableMicButton = findViewById(R.id.enableMicButton)
         statusText.setTextIsSelectable(true)
 
         muteIcon.setOnClickListener { service?.toggleMute(); reflectMuteUi() }
         muteLabel.setOnClickListener { muteIcon.performClick() }
+
+        enableMicButton.setOnClickListener {
+            if (micPermanentlyDenied) {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                startActivity(intent)
+            } else {
+                ensurePermissionsThenStart()
+            }
+        }
 
         findViewById<View>(R.id.settingsButton).setOnClickListener {
             Toast.makeText(this, "Settings — coming soon", Toast.LENGTH_SHORT).show()
@@ -108,6 +164,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         if (missing.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, missing.toTypedArray(), permissionCode)
         } else {
+            permissionCard.visibility = View.GONE
             startJarvisService()
         }
     }
@@ -123,8 +180,14 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         if (requestCode != permissionCode) return
         val micIndex = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
         val micGranted = micIndex != -1 && grantResults.getOrNull(micIndex) == PackageManager.PERMISSION_GRANTED
-        if (micGranted) startJarvisService()
-        else setJarvisState(JarvisState.ERROR, "TRY AGAIN", "Microphone access is needed to listen.")
+        if (micGranted) {
+            permissionCard.visibility = View.GONE
+            startJarvisService()
+        } else {
+            micPermanentlyDenied = micIndex != -1 && !ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.RECORD_AUDIO)
+            permissionCard.visibility = View.VISIBLE
+            setJarvisState(JarvisState.ERROR, "TRY AGAIN", "Microphone access is needed to listen.")
+        }
     }
 
     private fun reflectMuteUi() {
@@ -134,6 +197,13 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
             if (svc.isPaused) android.R.drawable.ic_btn_speak_now
             else android.R.drawable.ic_lock_silent_mode
         )
+    }
+
+    private fun stateColor(state: JarvisState): Int = when (state) {
+        JarvisState.THINKING -> ContextCompat.getColor(this, R.color.accent_violet)
+        JarvisState.ERROR -> ContextCompat.getColor(this, R.color.state_error)
+        JarvisState.PAUSED -> ContextCompat.getColor(this, R.color.state_muted)
+        else -> ContextCompat.getColor(this, R.color.accent_cyan)
     }
 
     private fun setJarvisState(state: JarvisState, label: String, sub: String) {
@@ -147,15 +217,85 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
             JarvisState.PAUSED -> "Jarvis is paused"
         }
         stateLabel.text = label
+        stateLabel.setTextColor(stateColor(state))
         microcopy.text = sub
+
+        val color = stateColor(state)
+        waveformLeft.setBarColor(color)
+        waveformRight.setBarColor(color)
+
+        pausedCard.visibility = if (state == JarvisState.PAUSED) View.VISIBLE else View.GONE
+        tipsCard.visibility = if (state == JarvisState.ERROR) View.VISIBLE else View.GONE
+        thinkingCard.visibility = if (state == JarvisState.THINKING) View.VISIBLE else View.GONE
+
+        if (state == JarvisState.PAUSED) {
+            orbCenterIcon.visibility = View.VISIBLE
+            orbCenterIcon.setImageResource(android.R.drawable.ic_media_pause)
+            orbCenterIcon.setColorFilter(ContextCompat.getColor(this, R.color.text_secondary))
+        } else if (permissionCard.visibility == View.VISIBLE) {
+            orbCenterIcon.visibility = View.VISIBLE
+            orbCenterIcon.setImageResource(android.R.drawable.ic_lock_silent_mode)
+            orbCenterIcon.setColorFilter(ContextCompat.getColor(this, R.color.state_error))
+        } else {
+            orbCenterIcon.visibility = View.GONE
+        }
+
+        if (state == JarvisState.THINKING) {
+            currentRequestText.text = lastUserTextCache.ifBlank { "—" }
+            startThinkingChecklist()
+        } else {
+            stopThinkingChecklist()
+        }
+    }
+
+    private fun startThinkingChecklist() {
+        stopThinkingChecklist()
+        thinkingStepIndex = 0
+        thinkingRunnable = object : Runnable {
+            override fun run() {
+                updateThinkingSteps(thinkingStepIndex)
+                thinkingStepIndex = (thinkingStepIndex + 1).coerceAtMost(2)
+                handler.postDelayed(this, 900)
+            }
+        }
+        handler.post(thinkingRunnable!!)
+    }
+
+    private fun stopThinkingChecklist() {
+        thinkingRunnable?.let { handler.removeCallbacks(it) }
+        thinkingRunnable = null
+    }
+
+    private fun updateThinkingSteps(activeIndex: Int) {
+        val labels = listOf("Understanding your question", "Working on it", "Preparing response")
+        val views = listOf(processStep0, processStep1, processStep2)
+        for (i in views.indices) {
+            val marker = when {
+                i < activeIndex -> "✓ "
+                i == activeIndex -> "● "
+                else -> "○ "
+            }
+            views[i].text = marker + labels[i]
+        }
     }
 
     private fun showConversation(userText: String?, jarvisText: String?) {
         if (userText.isNullOrBlank() && jarvisText.isNullOrBlank()) return
         conversationCard.visibility = View.VISIBLE
-        if (!userText.isNullOrBlank()) { userBubble.text = userText; userBubble.visibility = View.VISIBLE }
-        if (!jarvisText.isNullOrBlank()) { jarvisBubble.text = jarvisText; jarvisBubble.visibility = View.VISIBLE }
-        else jarvisBubble.visibility = View.GONE
+        val now = timeFormat.format(Date())
+        if (!userText.isNullOrBlank()) {
+            lastUserTextCache = userText
+            userBubble.text = userText
+            userTime.text = now
+            userBlock.visibility = View.VISIBLE
+        }
+        if (!jarvisText.isNullOrBlank()) {
+            jarvisBubble.text = jarvisText
+            jarvisTime.text = now
+            jarvisBlock.visibility = View.VISIBLE
+        } else {
+            jarvisBlock.visibility = View.GONE
+        }
     }
 
     override fun onState(state: JarvisState, label: String, sub: String) {
@@ -163,7 +303,11 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     }
 
     override fun onAmplitude(level: Float) {
-        runOnUiThread { orb.setAmplitude(level) }
+        runOnUiThread {
+            orb.setAmplitude(level)
+            waveformLeft.setLevel(level)
+            waveformRight.setLevel(level)
+        }
     }
 
     override fun onLog(message: String) {
@@ -176,13 +320,11 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopThinkingChecklist()
         if (bound) {
             service?.listener = null
             unbindService(connection)
             bound = false
         }
-        // Service is intentionally NOT stopped here — it's a foreground
-        // service and keeps running in the background so Jarvis stays
-        // alive when the screen locks or the app is closed.
     }
 }
