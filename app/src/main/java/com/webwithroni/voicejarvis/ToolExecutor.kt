@@ -9,7 +9,10 @@ import android.os.BatteryManager
 import android.provider.AlarmClock
 import android.provider.ContactsContract
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class ToolExecutor(private val context: Context) {
 
@@ -24,6 +27,7 @@ class ToolExecutor(private val context: Context) {
                 "set_alarm" -> setAlarm(args.optInt("hour"), args.optInt("minute"), args.optString("label"))
                 "set_timer" -> setTimer(args.optInt("seconds"), args.optString("label"))
                 "get_battery" -> getBattery()
+                "search_web" -> searchWeb(args.optString("query"))
                 else -> result(false, "Unknown tool: $name")
             }
         } catch (e: Exception) {
@@ -124,6 +128,40 @@ class ToolExecutor(private val context: Context) {
         }
         context.startActivity(intent)
         return result(true, "Timer set for $seconds seconds")
+    }
+
+    private fun searchWeb(query: String): JSONObject {
+        if (BuildConfig.TAVILY_API_KEY.isBlank()) return result(false, "Web search is not configured")
+        return try {
+            val conn = URL("https://api.tavily.com/search").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 10000
+            conn.readTimeout = 12000
+
+            val body = JSONObject().apply {
+                put("api_key", BuildConfig.TAVILY_API_KEY)
+                put("query", query)
+                put("max_results", 3)
+                put("search_depth", "basic")
+            }
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+
+
+            val responseJson = JSONObject(conn.inputStream.bufferedReader().readText())
+            val results = responseJson.optJSONArray("results") ?: JSONArray()
+            val summary = StringBuilder()
+            for (i in 0 until minOf(results.length(), 3)) {
+                val r = results.getJSONObject(i)
+                summary.append("- ${r.optString("title")}: ${r.optString("content").take(200)}
+")
+            }
+            if (summary.isEmpty()) result(false, "No results found for '$query'")
+            else result(true, summary.toString().trim())
+        } catch (e: Exception) {
+            result(false, "Search error: ${e.message}")
+        }
     }
 
     private fun getBattery(): JSONObject {

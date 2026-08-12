@@ -62,5 +62,8 @@ object ToolDeclarations {
 
         put(fn("get_battery", "Get the current battery level and charging status.",
             schema(JSONObject(), listOf())))
+
+        put(fn("search_web", "Search the web for real-time or current information: news, prices, scores, weather, or any fact that may have changed recently.",
+            schema(JSONObject().put("query", strProp("The search query")), listOf("query"))))
     }
 }

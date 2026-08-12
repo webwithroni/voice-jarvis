@@ -14,6 +14,7 @@ android {
         versionCode = 1
         versionName = "0.3.0"
         buildConfigField("String", "GEMINI_API_KEY", "\"${project.findProperty("GEMINI_API_KEY") ?: ""}\"")
+        buildConfigField("String", "TAVILY_API_KEY", "\"${project.findProperty("TAVILY_API_KEY") ?: ""}\"")
     }
 
     buildTypes {

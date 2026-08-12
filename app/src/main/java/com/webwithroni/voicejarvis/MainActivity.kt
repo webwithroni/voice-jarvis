@@ -129,7 +129,9 @@ class MainActivity : AppCompatActivity() {
             "You are speaking ALOUD, so keep responses short, natural, and conversational " +
             "(1-3 sentences), with no markdown or lists. " +
             "You have tools to call contacts, send WhatsApp/SMS drafts, open apps, control the flashlight, " +
-            "and set alarms or timers. Use them when the user asks for these actions, then briefly confirm what you did."
+            "and set alarms or timers. Use them when the user asks for these actions, then briefly confirm what you did. " +
+            "You also have a search_web tool for anything current or time-sensitive: news, prices, scores, weather, " +
+            "today's date, or facts that may have changed recently. Always use it instead of guessing for such questions."
 
         geminiClient = GeminiLiveClient(
             apiKey = apiKey,
@@ -233,7 +235,6 @@ class MainActivity : AppCompatActivity() {
         if (isPaused) {
             audioEngine.micSendEnabled = false
             audioEngine.clearPlaybackQueue()
-            geminiClient?.sendInterrupt()
             setJarvisState(JarvisState.PAUSED, "PAUSED", "Tap Resume to continue.")
             muteLabel.text = "RESUME"
             muteIcon.setImageResource(android.R.drawable.ic_btn_speak_now)
