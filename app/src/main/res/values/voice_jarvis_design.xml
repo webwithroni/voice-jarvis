@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ========================================================= -->
+    <!-- VOICE JARVIS V1 — DESIGN SYSTEM                          -->
+    <!-- ========================================================= -->
+
+    <!-- ========================= -->
+    <!-- BACKGROUND COLORS         -->
+    <!-- ========================= -->
+
+    <color name="vj_bg_canvas">#07090D</color>
+    <color name="vj_bg_surface">#0D1118</color>
+    <color name="vj_bg_surface_elevated">#121821</color>
+    <color name="vj_bg_surface_pressed">#171E28</color>
+
+    <!-- ========================= -->
+    <!-- TEXT COLORS               -->
+    <!-- ========================= -->
+
+    <color name="vj_text_primary">#F4F7FB</color>
+    <color name="vj_text_secondary">#8C97A8</color>
+    <color name="vj_text_tertiary">#566171</color>
+    <color name="vj_text_disabled">#414A58</color>
+
+    <!-- ========================= -->
+    <!-- BRAND / ACCENT COLORS     -->
+    <!-- ========================= -->
+
+    <color name="vj_cyan">#5CE7FF</color>
+    <color name="vj_cyan_bright">#00D9FF</color>
+    <color name="vj_blue">#4A8DFF</color>
+    <color name="vj_violet">#9B7CFF</color>
+
+    <!-- ========================= -->
+    <!-- STATE COLORS              -->
+    <!-- ========================= -->
+
+    <color name="vj_state_listening">#5CE7FF</color>
+    <color name="vj_state_hearing">#00D9FF</color>
+    <color name="vj_state_thinking">#9B7CFF</color>
+    <color name="vj_state_speaking">#5CE7FF</color>
+    <color name="vj_state_speaking_blue">#4A8DFF</color>
+    <color name="vj_state_error">#FF7181</color>
+    <color name="vj_state_paused">#414A58</color>
+    <color name="vj_state_permission">#FF7181</color>
+
+    <!-- ========================= -->
+    <!-- ORB COLORS                -->
+    <!-- ========================= -->
+
+    <color name="vj_orb_core">#FFFFFF</color>
+    <color name="vj_orb_cyan_glow">#5CE7FF</color>
+    <color name="vj_orb_violet_glow">#9B7CFF</color>
+    <color name="vj_orb_error_glow">#FF7181</color>
+    <color name="vj_orb_muted_glow">#414A58</color>
+
+    <!-- ========================= -->
+    <!-- BORDER COLORS             -->
+    <!-- ========================= -->
+
+    <color name="vj_border_subtle">#1AFFFFFF</color>
+    <color name="vj_border_normal">#24FFFFFF</color>
+    <color name="vj_border_active">#4D5CE7FF</color>
+    <color name="vj_border_error">#4DFF7181</color>
+
+    <!-- ========================= -->
+    <!-- OVERLAY COLORS             -->
+    <!-- ========================= -->
+
+    <color name="vj_overlay_dark">#9907090D</color>
+    <color name="vj_overlay_black">#CC000000</color>
+    <color name="vj_overlay_cyan">#145CE7FF</color>
+    <color name="vj_overlay_violet">#149B7CFF</color>
+    <color name="vj_overlay_error">#14FF7181</color>
+
+    <!-- ========================= -->
+    <!-- DIMENSIONS                -->
+    <!-- ========================= -->
+
+    <dimen name="vj_space_4">4dp</dimen>
+    <dimen name="vj_space_8">8dp</dimen>
+    <dimen name="vj_space_12">12dp</dimen>
+    <dimen name="vj_space_16">16dp</dimen>
+    <dimen name="vj_space_20">20dp</dimen>
+    <dimen name="vj_space_24">24dp</dimen>
+    <dimen name="vj_space_32">32dp</dimen>
+    <dimen name="vj_space_40">40dp</dimen>
+    <dimen name="vj_space_48">48dp</dimen>
+    <dimen name="vj_space_64">64dp</dimen>
+    <dimen name="vj_space_80">80dp</dimen>
+
+    <!-- Screen -->
+    <dimen name="vj_screen_horizontal">20dp</dimen>
+    <dimen name="vj_screen_horizontal_large">24dp</dimen>
+    <dimen name="vj_screen_top">20dp</dimen>
+    <dimen name="vj_screen_bottom">24dp</dimen>
+
+    <!-- Cards -->
+    <dimen name="vj_card_radius_small">10dp</dimen>
+    <dimen name="vj_card_radius">18dp</dimen>
+    <dimen name="vj_card_radius_large">22dp</dimen>
+    <dimen name="vj_card_padding">16dp</dimen>
+    <dimen name="vj_card_padding_large">20dp</dimen>
+
+    <!-- Buttons -->
+    <dimen name="vj_button_height">52dp</dimen>
+    <dimen name="vj_button_height_small">44dp</dimen>
+    <dimen name="vj_button_radius">16dp</dimen>
+    <dimen name="vj_icon_button_size">48dp</dimen>
+    <dimen name="vj_icon_button_size_large">56dp</dimen>
+
+    <!-- Touch -->
+    <dimen name="vj_min_touch_target">48dp</dimen>
+
+    <!-- Orb -->
+    <dimen name="vj_orb_min_size">280dp</dimen>
+    <dimen name="vj_orb_max_size">360dp</dimen>
+
+    <!-- ========================= -->
+    <!-- TEXT SIZES                -->
+    <!-- ========================= -->
+
+    <dimen name="vj_text_display">32sp</dimen>
+    <dimen name="vj_text_title">24sp</dimen>
+    <dimen name="vj_text_heading">18sp</dimen>
+    <dimen name="vj_text_body">16sp</dimen>
+    <dimen name="vj_text_secondary">14sp</dimen>
+    <dimen name="vj_text_label">13sp</dimen>
+    <dimen name="vj_text_caption">12sp</dimen>
+    <dimen name="vj_text_micro">11sp</dimen>
+
+    <!-- State label -->
+    <dimen name="vj_state_label_size">18sp</dimen>
+
+    <!-- ========================= -->
+    <!-- ALPHA VALUES              -->
+    <!-- ========================= -->
+
+    <item name="vj_alpha_disabled" type="fraction">0.38</item>
+    <item name="vj_alpha_secondary" type="fraction">0.70</item>
+    <item name="vj_alpha_subtle" type="fraction">0.45</item>
+    <item name="vj_alpha_glow" type="fraction">0.30</item>
+
+    <!-- ========================= -->
+    <!-- COMMON TEXT STYLES        -->
+    <!-- ========================= -->
+
+    <style name="VJ.Text.Display">
+        <item name="android:textSize">@dimen/vj_text_display</item>
+        <item name="android:textColor">@color/vj_text_primary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="VJ.Text.Title">
+        <item name="android:textSize">@dimen/vj_text_title</item>
+        <item name="android:textColor">@color/vj_text_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="VJ.Text.Heading">
+        <item name="android:textSize">@dimen/vj_text_heading</item>
+        <item name="android:textColor">@color/vj_text_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="VJ.Text.Body">
+        <item name="android:textSize">@dimen/vj_text_body</item>
+        <item name="android:textColor">@color/vj_text_primary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="VJ.Text.Secondary">
+        <item name="android:textSize">@dimen/vj_text_secondary</item>
+        <item name="android:textColor">@color/vj_text_secondary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="VJ.Text.Caption">
+        <item name="android:textSize">@dimen/vj_text_caption</item>
+        <item name="android:textColor">@color/vj_text_tertiary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <!-- ========================= -->
+    <!-- STATE LABEL STYLES        -->
+    <!-- ========================= -->
+
+    <style name="VJ.StateLabel">
+        <item name="android:textSize">@dimen/vj_state_label_size</item>
+        <item name="android:textColor">@color/vj_state_listening</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.32</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <!-- ========================= -->
+    <!-- CARD STYLES               -->
+    <!-- ========================= -->
+
+    <style name="VJ.Card">
+        <item name="android:background">@drawable/vj_card_background</item>
+        <item name="android:padding">@dimen/vj_card_padding</item>
+    </style>
+
+    <!-- ========================= -->
+    <!-- BUTTON TEXT STYLES        -->
+    <!-- ========================= -->
+
+    <style name="VJ.Button">
+        <item name="android:minHeight">@dimen/vj_button_height</item>
+        <item name="android:minWidth">@dimen/vj_min_touch_target</item>
+        <item name="android:textSize">@dimen/vj_text_secondary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:gravity">center</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+</resources>
