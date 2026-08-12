@@ -23,9 +23,13 @@ class GeminiLiveClient(
     private val onDisconnected: () -> Unit
 ) {
     private var webSocket: WebSocket? = null
+
+    // No automatic OkHttp-level ping — mobile carrier networks often silently
+    // drop/ignore WebSocket ping frames even when the data channel is fine.
+    // We rely entirely on our own app-level keepalive (silent audio chunk every 8s).
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
-        .pingInterval(15, TimeUnit.SECONDS)
+        .pingInterval(0, TimeUnit.MILLISECONDS)
         .build()
 
     private val handler = Handler(Looper.getMainLooper())
@@ -35,6 +39,8 @@ class GeminiLiveClient(
 
     fun connect() {
         manuallyClosed = false
+        cancelTimers()
+
         val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=$apiKey"
         val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -43,9 +49,12 @@ class GeminiLiveClient(
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) { handleMessage(bytes.utf8()) }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 onError("WebSocket error: ${t.javaClass.simpleName}: ${t.message}")
+                cancelTimers()
+                onDisconnected()
                 scheduleReconnect()
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                cancelTimers()
                 onDisconnected()
                 if (!manuallyClosed) scheduleReconnect()
             }
@@ -139,6 +148,13 @@ class GeminiLiveClient(
         handler.postDelayed(sessionRenewRunnable!!, 540_000)
     }
 
+    private fun cancelTimers() {
+        keepAliveRunnable?.let { handler.removeCallbacks(it) }
+        sessionRenewRunnable?.let { handler.removeCallbacks(it) }
+        keepAliveRunnable = null
+        sessionRenewRunnable = null
+    }
+
     private fun scheduleReconnect() {
         if (manuallyClosed) return
         handler.postDelayed({ connect() }, 3000)
@@ -146,8 +162,7 @@ class GeminiLiveClient(
 
     fun disconnect(manual: Boolean = true) {
         manuallyClosed = manual
-        keepAliveRunnable?.let { handler.removeCallbacks(it) }
-        sessionRenewRunnable?.let { handler.removeCallbacks(it) }
+        cancelTimers()
         webSocket?.close(1000, "Client closed")
         webSocket = null
     }
