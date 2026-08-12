@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -30,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var debugScroll: View
 
     private lateinit var audioEngine: AudioEngine
+    private lateinit var toolExecutor: ToolExecutor
     private var geminiClient: GeminiLiveClient? = null
     private val handler = Handler(Looper.getMainLooper())
 
@@ -72,6 +74,7 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
+        toolExecutor = ToolExecutor(this)
         audioEngine = AudioEngine(
             onMicChunk = { chunk -> geminiClient?.sendAudioChunk(chunk) },
             onMicAmplitude = { level -> runOnUiThread { handleMicAmplitude(level) } },
@@ -81,10 +84,14 @@ class MainActivity : AppCompatActivity() {
 
         setJarvisState(JarvisState.THINKING, "CONNECTING", "Waking up Jarvis…")
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), micPermissionCode)
+        val neededPermissions = listOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.READ_CONTACTS
+        ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+
+        if (neededPermissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, neededPermissions.toTypedArray(), micPermissionCode)
         } else {
             connectGemini()
         }
@@ -110,7 +117,9 @@ class MainActivity : AppCompatActivity() {
         val systemPrompt = "You are Jarvis, Roni's personal voice assistant. " +
             "Reply in the same mix of Hindi, Bengali, or English the user used. " +
             "You are speaking ALOUD, so keep responses short, natural, and conversational " +
-            "(1-3 sentences), with no markdown or lists."
+            "(1-3 sentences), with no markdown or lists. " +
+            "You have tools to call contacts, send WhatsApp/SMS drafts, open apps, control the flashlight, " +
+            "and set alarms or timers. Use them when the user asks for these actions, then briefly confirm what you did."
 
         geminiClient = GeminiLiveClient(
             apiKey = apiKey,
@@ -136,6 +145,11 @@ class MainActivity : AppCompatActivity() {
             onOutputTranscript = { text ->
                 pendingJarvisText += text
                 runOnUiThread { showConversation(pendingUserText, pendingJarvisText) }
+            },
+            onToolCall = { id, name, args ->
+                val toolResult = toolExecutor.execute(name, args)
+                geminiClient?.sendToolResponse(id, name, toolResult)
+                runOnUiThread { log("Tool: $name -> ${toolResult.optString("message")}") }
             },
             onTurnComplete = {
                 runOnUiThread {

@@ -19,14 +19,12 @@ class GeminiLiveClient(
     private val onInputTranscript: (String) -> Unit,
     private val onOutputTranscript: (String) -> Unit,
     private val onTurnComplete: () -> Unit,
+    private val onToolCall: (id: String, name: String, args: JSONObject) -> Unit,
     private val onError: (String) -> Unit,
     private val onDisconnected: () -> Unit
 ) {
     private var webSocket: WebSocket? = null
 
-    // No automatic OkHttp-level ping — mobile carrier networks often silently
-    // drop/ignore WebSocket ping frames even when the data channel is fine.
-    // We rely entirely on our own app-level keepalive (silent audio chunk every 8s).
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(0, TimeUnit.MILLISECONDS)
@@ -81,6 +79,7 @@ class GeminiLiveClient(
                 })
                 put("output_audio_transcription", JSONObject())
                 put("input_audio_transcription", JSONObject())
+                put("tools", JSONArray().put(JSONObject().put("function_declarations", ToolDeclarations.all())))
             })
         }
         webSocket?.send(setup.toString())
@@ -90,6 +89,18 @@ class GeminiLiveClient(
         try {
             val json = JSONObject(text)
             if (json.has("setupComplete")) { onSetupComplete(); return }
+
+            json.optJSONObject("toolCall")?.let { toolCall ->
+                val calls = toolCall.optJSONArray("functionCalls") ?: return@let
+                for (i in 0 until calls.length()) {
+                    val call = calls.getJSONObject(i)
+                    val id = call.optString("id")
+                    val name = call.optString("name")
+                    val args = call.optJSONObject("args") ?: JSONObject()
+                    onToolCall(id, name, args)
+                }
+                return
+            }
 
             val serverContent = json.optJSONObject("serverContent") ?: return
             val modelTurn = serverContent.optJSONObject("modelTurn")
@@ -117,6 +128,19 @@ class GeminiLiveClient(
                 put("media_chunks", JSONArray().put(JSONObject().apply {
                     put("mime_type", "audio/pcm;rate=16000")
                     put("data", b64)
+                }))
+            })
+        }
+        webSocket?.send(msg.toString())
+    }
+
+    fun sendToolResponse(id: String, name: String, response: JSONObject) {
+        val msg = JSONObject().apply {
+            put("tool_response", JSONObject().apply {
+                put("function_responses", JSONArray().put(JSONObject().apply {
+                    put("id", id)
+                    put("name", name)
+                    put("response", response)
                 }))
             })
         }
