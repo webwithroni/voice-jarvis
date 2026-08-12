@@ -24,7 +24,7 @@
     <color name="vj_text_disabled">#414A58</color>
 
     <!-- ========================= -->
-    <!-- BRAND / ACCENT COLORS     -->
+    <!-- BRAND COLORS              -->
     <!-- ========================= -->
 
     <color name="vj_cyan">#5CE7FF</color>
@@ -65,7 +65,7 @@
     <color name="vj_border_error">#4DFF7181</color>
 
     <!-- ========================= -->
-    <!-- OVERLAY COLORS             -->
+    <!-- OVERLAYS                  -->
     <!-- ========================= -->
 
     <color name="vj_overlay_dark">#9907090D</color>
@@ -75,7 +75,7 @@
     <color name="vj_overlay_error">#14FF7181</color>
 
     <!-- ========================= -->
-    <!-- DIMENSIONS                -->
+    <!-- SPACING                   -->
     <!-- ========================= -->
 
     <dimen name="vj_space_4">4dp</dimen>
@@ -118,7 +118,7 @@
     <dimen name="vj_orb_max_size">360dp</dimen>
 
     <!-- ========================= -->
-    <!-- TEXT SIZES                -->
+    <!-- TYPOGRAPHY               -->
     <!-- ========================= -->
 
     <dimen name="vj_text_display">32sp</dimen>
@@ -129,12 +129,10 @@
     <dimen name="vj_text_label">13sp</dimen>
     <dimen name="vj_text_caption">12sp</dimen>
     <dimen name="vj_text_micro">11sp</dimen>
-
-    <!-- State label -->
     <dimen name="vj_state_label_size">18sp</dimen>
 
     <!-- ========================= -->
-    <!-- ALPHA VALUES              -->
+    <!-- ALPHA VALUES             -->
     <!-- ========================= -->
 
     <item name="vj_alpha_disabled" type="fraction">0.38</item>
@@ -142,46 +140,46 @@
     <item name="vj_alpha_subtle" type="fraction">0.45</item>
     <item name="vj_alpha_glow" type="fraction">0.30</item>
 
-    <!-- ========================= -->
-    <!-- COMMON TEXT STYLES        -->
-    <!-- ========================= -->
+    <!-- ========================================================= -->
+    <!-- TEXT STYLES                                               -->
+    <!-- ========================================================= -->
 
-    <style name="VJ.Text.Display">
+    <style name="VJTextDisplay">
         <item name="android:textSize">@dimen/vj_text_display</item>
         <item name="android:textColor">@color/vj_text_primary</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:includeFontPadding">false</item>
     </style>
 
-    <style name="VJ.Text.Title">
+    <style name="VJTextTitle">
         <item name="android:textSize">@dimen/vj_text_title</item>
         <item name="android:textColor">@color/vj_text_primary</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:includeFontPadding">false</item>
     </style>
 
-    <style name="VJ.Text.Heading">
+    <style name="VJTextHeading">
         <item name="android:textSize">@dimen/vj_text_heading</item>
         <item name="android:textColor">@color/vj_text_primary</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:includeFontPadding">false</item>
     </style>
 
-    <style name="VJ.Text.Body">
+    <style name="VJTextBody">
         <item name="android:textSize">@dimen/vj_text_body</item>
         <item name="android:textColor">@color/vj_text_primary</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:includeFontPadding">false</item>
     </style>
 
-    <style name="VJ.Text.Secondary">
+    <style name="VJTextSecondary">
         <item name="android:textSize">@dimen/vj_text_secondary</item>
         <item name="android:textColor">@color/vj_text_secondary</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:includeFontPadding">false</item>
     </style>
 
-    <style name="VJ.Text.Caption">
+    <style name="VJTextCaption">
         <item name="android:textSize">@dimen/vj_text_caption</item>
         <item name="android:textColor">@color/vj_text_tertiary</item>
         <item name="android:fontFamily">sans-serif</item>
@@ -189,10 +187,10 @@
     </style>
 
     <!-- ========================= -->
-    <!-- STATE LABEL STYLES        -->
+    <!-- STATE LABEL              -->
     <!-- ========================= -->
 
-    <style name="VJ.StateLabel">
+    <style name="VJStateLabel">
         <item name="android:textSize">@dimen/vj_state_label_size</item>
         <item name="android:textColor">@color/vj_state_listening</item>
         <item name="android:fontFamily">sans-serif-medium</item>
@@ -202,19 +200,10 @@
     </style>
 
     <!-- ========================= -->
-    <!-- CARD STYLES               -->
+    <!-- BUTTON                   -->
     <!-- ========================= -->
 
-    <style name="VJ.Card">
-        <item name="android:background">@drawable/vj_card_background</item>
-        <item name="android:padding">@dimen/vj_card_padding</item>
-    </style>
-
-    <!-- ========================= -->
-    <!-- BUTTON TEXT STYLES        -->
-    <!-- ========================= -->
-
-    <style name="VJ.Button">
+    <style name="VJButton">
         <item name="android:minHeight">@dimen/vj_button_height</item>
         <item name="android:minWidth">@dimen/vj_min_touch_target</item>
         <item name="android:textSize">@dimen/vj_text_secondary</item>
@@ -222,6 +211,15 @@
         <item name="android:textAllCaps">false</item>
         <item name="android:gravity">center</item>
         <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <!-- ========================= -->
+    <!-- CARD                     -->
+    <!-- ========================= -->
+
+    <style name="VJCard">
+        <item name="android:background">@drawable/vj_card_background</item>
+        <item name="android:padding">@dimen/vj_card_padding</item>
     </style>
 
 </resources>
