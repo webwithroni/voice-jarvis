@@ -67,6 +67,26 @@ class JarvisService : Service() {
     private var latestUserTranscript = ""
     private var latestJarvisTranscript = ""
 
+    /*
+     * Firebase telemetry timing.
+     *
+     * These timestamps are local monotonic timings and are
+     * completely independent from the Gemini audio pipeline.
+     */
+    private var firebaseTurnStartedAt: Long = 0L
+    private var firebaseFirstResponseRecorded = false
+    private var firebaseFirstResponseLatencyMs: Long? = null
+    private var firebaseTurnInterrupted = false
+    private var firebaseConversationStarted = false
+
+    /*
+     * Tools used during the current conversational turn.
+     *
+     * Kept locally and flushed to Firebase only when the turn ends.
+     */
+    private val firebaseTurnTools =
+        mutableListOf<String>()
+
     private val ampThreshold = 0.045f
 
     /*
@@ -320,6 +340,35 @@ class JarvisService : Service() {
 
                 audioEngine.micSendEnabled = false
 
+                /*
+                 * First actual assistant AUDIO chunk.
+                 *
+                 * This is the real voice-latency metric:
+                 * user turn start -> first playable Jarvis audio.
+                 */
+                if (
+                    firebaseTurnStartedAt > 0L &&
+                    !firebaseFirstResponseRecorded
+                ) {
+
+                    val latencyMs =
+                        (
+                            android.os.SystemClock.elapsedRealtime() -
+                                firebaseTurnStartedAt
+                        ).coerceAtLeast(0L)
+
+                    firebaseFirstResponseLatencyMs =
+                        latencyMs
+
+                    firebaseFirstResponseRecorded = true
+
+                    FirebaseManager.recordLatency(
+                        metric = "time_to_first_audio",
+                        durationMs = latencyMs,
+                        provider = "gemini-live"
+                    )
+                }
+
                 audioEngine.enqueuePlayback(
                     bytes
                 )
@@ -348,6 +397,31 @@ class JarvisService : Service() {
 
                 if (cleaned.isNotBlank()) {
 
+                    /*
+                     * Start Firebase telemetry only when we receive
+                     * an actual meaningful user transcript.
+                     *
+                     * Firebase is completely asynchronous and never
+                     * sits in the Gemini audio path.
+                     */
+                    if (!firebaseConversationStarted) {
+
+                        val conversationId =
+                            FirebaseManager.ensureConversationStarted(
+                                "voice"
+                            )
+
+                        if (conversationId != null) {
+                            firebaseConversationStarted = true
+                        }
+                    }
+
+                    if (firebaseTurnStartedAt == 0L) {
+
+                        firebaseTurnStartedAt =
+                            android.os.SystemClock.elapsedRealtime()
+                    }
+
                     latestUserTranscript =
                         cleaned
 
@@ -371,6 +445,36 @@ class JarvisService : Service() {
 
                 if (cleaned.isNotBlank()) {
 
+                    /*
+                     * Gemini output transcription is streamed in chunks.
+                     *
+                     * Record only the FIRST meaningful assistant chunk
+                     * for latency measurement. The UI can still receive
+                     * every subsequent chunk normally.
+                     */
+                    if (
+                        firebaseTurnStartedAt > 0L &&
+                        !firebaseFirstResponseRecorded
+                    ) {
+
+                        val latencyMs =
+                            (
+                                android.os.SystemClock.elapsedRealtime() -
+                                    firebaseTurnStartedAt
+                            ).coerceAtLeast(0L)
+
+                        firebaseFirstResponseLatencyMs =
+                            latencyMs
+
+                        firebaseFirstResponseRecorded = true
+
+                        FirebaseManager.recordLatency(
+                            metric = "first_assistant_transcript",
+                            durationMs = latencyMs,
+                            provider = "gemini-live"
+                        )
+                    }
+
                     latestJarvisTranscript =
                         cleaned
 
@@ -388,6 +492,16 @@ class JarvisService : Service() {
             },
 
             onInterrupted = {
+
+                firebaseTurnInterrupted = true
+
+                if (firebaseConversationStarted) {
+                    FirebaseManager.recordLatency(
+                        metric = "interrupted",
+                        durationMs = 1L,
+                        provider = "gemini-live"
+                    )
+                }
 
                 handler.post {
 
@@ -417,6 +531,16 @@ class JarvisService : Service() {
 
             onToolCall = { id, name, args ->
 
+                /*
+                 * Keep tool telemetry in memory during the turn.
+                 * It is flushed once when Gemini completes the turn.
+                 */
+                synchronized(firebaseTurnTools) {
+                    if (!firebaseTurnTools.contains(name)) {
+                        firebaseTurnTools.add(name)
+                    }
+                }
+
                 val result =
                     toolExecutor.execute(
                         name,
@@ -439,23 +563,79 @@ class JarvisService : Service() {
 
             onTurnComplete = {
 
+                val turnEndedAt =
+                    android.os.SystemClock.elapsedRealtime()
+
+                val turnStartedAt =
+                    firebaseTurnStartedAt
+
+                val userTranscript =
+                    latestUserTranscript
+
+                val assistantTranscript =
+                    latestJarvisTranscript
+
+                val durationMs =
+                    if (turnStartedAt > 0L) {
+                        (turnEndedAt - turnStartedAt)
+                            .coerceAtLeast(0L)
+                    } else {
+                        null
+                    }
+
+                val tools =
+                    synchronized(firebaseTurnTools) {
+                        firebaseTurnTools.toList()
+                    }
+
+                /*
+                 * One Firebase write per completed turn.
+                 *
+                 * This happens outside the live audio streaming
+                 * callbacks and therefore does not add voice latency.
+                 */
+                if (
+                    firebaseConversationStarted &&
+                    (
+                        userTranscript.isNotBlank() ||
+                        assistantTranscript.isNotBlank()
+                    )
+                ) {
+
+                    FirebaseManager.recordCompletedTurn(
+                        userTranscript = userTranscript,
+                        assistantTranscript = assistantTranscript,
+                        durationMs = durationMs,
+                        firstResponseLatencyMs =
+                            firebaseFirstResponseLatencyMs,
+                        provider = "gemini-live",
+                        interrupted = firebaseTurnInterrupted,
+                        toolNames = tools
+                    )
+                }
+
+                firebaseTurnStartedAt = 0L
+                firebaseFirstResponseRecorded = false
+                firebaseFirstResponseLatencyMs = null
+                firebaseTurnInterrupted = false
+
+                synchronized(firebaseTurnTools) {
+                    firebaseTurnTools.clear()
+                }
+
                 handler.post {
 
-                    if (
-                        latestUserTranscript.isNotBlank()
-                    ) {
+                    if (userTranscript.isNotBlank()) {
 
                         log(
-                            "You: $latestUserTranscript"
+                            "You: $userTranscript"
                         )
                     }
 
-                    if (
-                        latestJarvisTranscript.isNotBlank()
-                    ) {
+                    if (assistantTranscript.isNotBlank()) {
 
                         log(
-                            "Jarvis: $latestJarvisTranscript"
+                            "Jarvis: $assistantTranscript"
                         )
                     }
 

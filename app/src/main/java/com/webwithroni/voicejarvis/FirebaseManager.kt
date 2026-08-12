@@ -85,6 +85,26 @@ object FirebaseManager {
     }
 
     /**
+     * Ensure that a conversation exists.
+     *
+     * Safe to call repeatedly from the voice pipeline.
+     * If Firebase authentication is not ready yet, this simply
+     * returns null and voice continues normally.
+     */
+    fun ensureConversationStarted(
+        source: String = "voice"
+    ): String? {
+
+        if (!telemetryEnabled) return null
+
+        currentConversationId?.let {
+            return it
+        }
+
+        return startConversation(source)
+    }
+
+    /**
      * Start a new conversation session.
      */
     fun startConversation(
@@ -202,6 +222,73 @@ object FirebaseManager {
             .set(data)
             .addOnFailureListener {
                 Log.e(TAG, "Failed to record turn", it)
+            }
+    }
+
+    /**
+     * Record one fully completed conversational turn.
+     *
+     * This is intentionally written once per turn rather than once
+     * per streaming transcript callback.
+     *
+     * Raw microphone/audio data is never stored.
+     */
+    fun recordCompletedTurn(
+        userTranscript: String?,
+        assistantTranscript: String?,
+        durationMs: Long?,
+        firstResponseLatencyMs: Long?,
+        provider: String = "gemini-live",
+        interrupted: Boolean = false,
+        toolNames: List<String> = emptyList()
+    ) {
+
+        if (!canWrite()) return
+
+        val user = auth.currentUser ?: return
+        val conversationId = currentConversationId ?: return
+
+        val turnId = UUID.randomUUID().toString()
+
+        val data = hashMapOf<String, Any>(
+            "createdAt" to FieldValue.serverTimestamp(),
+            "provider" to provider,
+            "interrupted" to interrupted
+        )
+
+        userTranscript
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                data["userTranscript"] = it.take(4000)
+            }
+
+        assistantTranscript
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                data["assistantTranscript"] = it.take(4000)
+            }
+
+        durationMs?.let {
+            data["durationMs"] = it.coerceAtLeast(0L)
+        }
+
+        firstResponseLatencyMs?.let {
+            data["firstResponseLatencyMs"] = it.coerceAtLeast(0L)
+        }
+
+        if (toolNames.isNotEmpty()) {
+            data["tools"] = toolNames.distinct().take(20)
+        }
+
+        db.collection("users")
+            .document(user.uid)
+            .collection("conversations")
+            .document(conversationId)
+            .collection("turns")
+            .document(turnId)
+            .set(data)
+            .addOnFailureListener {
+                Log.e(TAG, "Failed to record completed turn", it)
             }
     }
 
