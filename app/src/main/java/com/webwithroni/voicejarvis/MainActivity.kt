@@ -92,6 +92,12 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashLogger.install(this)
+
+        if (CrashLogger.hasCrashLog(this)) {
+            showCrashRecovery()
+            return
+        }
+
         setContentView(R.layout.activity_main)
 
         statusText = findViewById(R.id.statusText)
@@ -148,6 +154,165 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
         setJarvisState(JarvisState.THINKING, "CONNECTING", "Waking up Jarvis…")
         ensurePermissionsThenStart()
+    }
+
+    private fun showCrashRecovery() {
+
+        val root = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            setBackgroundColor(
+                ContextCompat.getColor(
+                    this@MainActivity,
+                    R.color.vj_bg_canvas
+                )
+            )
+            setPadding(48, 80, 48, 48)
+        }
+
+        val title = TextView(this).apply {
+            text = "VOICE JARVIS"
+            textSize = 18f
+            setTextColor(
+                ContextCompat.getColor(
+                    this@MainActivity,
+                    R.color.vj_text_primary
+                )
+            )
+            letterSpacing = 0.25f
+        }
+
+        val state = TextView(this).apply {
+            text = "CRASH RECOVERY"
+            textSize = 22f
+            setTextColor(
+                ContextCompat.getColor(
+                    this@MainActivity,
+                    R.color.vj_state_error
+                )
+            )
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 40, 0, 16)
+        }
+
+        val message = TextView(this).apply {
+            text = "Jarvis closed unexpectedly during the previous launch. A diagnostic report has been saved."
+            textSize = 15f
+            setTextColor(
+                ContextCompat.getColor(
+                    this@MainActivity,
+                    R.color.vj_text_secondary
+                )
+            )
+            gravity = android.view.Gravity.CENTER
+        }
+
+        val report = TextView(this).apply {
+            text = CrashLogger.readLog(this@MainActivity)
+            textSize = 12f
+            setTextColor(
+                ContextCompat.getColor(
+                    this@MainActivity,
+                    R.color.vj_text_tertiary
+                )
+            )
+            setPadding(20, 20, 20, 20)
+            setTextIsSelectable(true)
+            setBackgroundResource(R.drawable.vj_card_background)
+            maxLines = 12
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+
+        val shareButton = Button(this).apply {
+            text = "Share crash report"
+            setTextColor(
+                ContextCompat.getColor(
+                    this@MainActivity,
+                    R.color.vj_bg_canvas
+                )
+            )
+            background = ContextCompat.getDrawable(
+                this@MainActivity,
+                R.drawable.vj_button_primary
+            )
+            setOnClickListener {
+                CrashLogger.shareCrashLog(this@MainActivity)
+            }
+        }
+
+        val retryButton = Button(this).apply {
+            text = "Clear report & try again"
+            setTextColor(
+                ContextCompat.getColor(
+                    this@MainActivity,
+                    R.color.vj_text_primary
+                )
+            )
+            background = ContextCompat.getDrawable(
+                this@MainActivity,
+                R.drawable.vj_button_secondary
+            )
+            setOnClickListener {
+                CrashLogger.clearLog(this@MainActivity)
+                recreate()
+            }
+        }
+
+        root.addView(
+            title,
+            android.widget.LinearLayout.LayoutParams(
+                -1,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        root.addView(
+            state,
+            android.widget.LinearLayout.LayoutParams(
+                -1,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        root.addView(
+            message,
+            android.widget.LinearLayout.LayoutParams(
+                -1,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        val reportParams = android.widget.LinearLayout.LayoutParams(
+            -1,
+            0,
+            1f
+        ).apply {
+            topMargin = 32
+            bottomMargin = 24
+        }
+
+        root.addView(report, reportParams)
+
+        root.addView(
+            shareButton,
+            android.widget.LinearLayout.LayoutParams(
+                -1,
+                54
+            ).apply {
+                bottomMargin = 12
+            }
+        )
+
+        root.addView(
+            retryButton,
+            android.widget.LinearLayout.LayoutParams(
+                -1,
+                54
+            )
+        )
+
+        setContentView(root)
     }
 
     private fun ensurePermissionsThenStart() {
