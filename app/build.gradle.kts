@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -13,16 +14,46 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.4.0"
-        buildConfigField("String", "GEMINI_API_KEY", "\"${project.findProperty("GEMINI_API_KEY") ?: ""}\"")
-        buildConfigField("String", "TAVILY_API_KEY", "\"${project.findProperty("TAVILY_API_KEY") ?: ""}\"")
-        buildConfigField("String", "GROQ_API_KEY", "\"${project.findProperty("GROQ_API_KEY") ?: ""}\"")
-        buildConfigField("String", "OPENROUTER_API_KEY", "\"${project.findProperty("OPENROUTER_API_KEY") ?: ""}\"")
-        buildConfigField("String", "DEEPSEEK_API_KEY", "\"${project.findProperty("DEEPSEEK_API_KEY") ?: ""}\"")
+
+        buildConfigField(
+            "String",
+            "GEMINI_API_KEY",
+            "\"${project.findProperty("GEMINI_API_KEY") ?: ""}\""
+        )
+
+        buildConfigField(
+            "String",
+            "TAVILY_API_KEY",
+            "\"${project.findProperty("TAVILY_API_KEY") ?: ""}\""
+        )
+
+        buildConfigField(
+            "String",
+            "GROQ_API_KEY",
+            "\"${project.findProperty("GROQ_API_KEY") ?: ""}\""
+        )
+
+        buildConfigField(
+            "String",
+            "OPENROUTER_API_KEY",
+            "\"${project.findProperty("OPENROUTER_API_KEY") ?: ""}\""
+        )
+
+        buildConfigField(
+            "String",
+            "DEEPSEEK_API_KEY",
+            "\"${project.findProperty("DEEPSEEK_API_KEY") ?: ""}\""
+        )
     }
 
     buildTypes {
-        debug { isMinifyEnabled = false }
-        release { isMinifyEnabled = false }
+        debug {
+            isMinifyEnabled = false
+        }
+
+        release {
+            isMinifyEnabled = false
+        }
     }
 
     compileOptions {
@@ -46,4 +77,8 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:34.6.0"))
+    implementation("com.google.firebase:firebase-analytics")
 }
