@@ -3,7 +3,11 @@ package com.webwithroni.voicejarvis
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
-import okhttp3.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import okio.ByteString
 import org.json.JSONArray
 import org.json.JSONObject
@@ -13,275 +17,419 @@ class GeminiLiveClient(
     private val apiKey: String,
     private val systemPrompt: String,
     private val voiceName: String = "Aoede",
-    private val model: String = "models/gemini-2.5-flash-native-audio-preview-12-2025",
+    private val model: String =
+        "models/gemini-2.5-flash-native-audio-preview-12-2025",
+
     private val onSetupComplete: () -> Unit,
     private val onAudioChunk: (ByteArray) -> Unit,
+
     private val onInputTranscript: (String) -> Unit,
     private val onOutputTranscript: (String) -> Unit,
+
     private val onTurnComplete: () -> Unit,
-    private val onToolCall: (id: String, name: String, args: JSONObject) -> Unit,
+
+    /*
+     * Gemini Live server-side interruption event.
+     *
+     * This is critical for real-time barge-in.
+     */
+    private val onInterrupted: () -> Unit,
+
+    private val onToolCall:
+        (id: String, name: String, args: JSONObject) -> Unit,
+
     private val onError: (String) -> Unit,
     private val onDisconnected: () -> Unit
 ) {
 
     private var webSocket: WebSocket? = null
 
-    private val client = OkHttpClient.Builder()
-        .readTimeout(0, TimeUnit.MILLISECONDS)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val client =
+        OkHttpClient.Builder()
+            .readTimeout(
+                0,
+                TimeUnit.MILLISECONDS
+            )
+            .connectTimeout(
+                15,
+                TimeUnit.SECONDS
+            )
+            .writeTimeout(
+                15,
+                TimeUnit.SECONDS
+            )
+            .build()
 
-    private val handler = Handler(Looper.getMainLooper())
+    private val handler =
+        Handler(Looper.getMainLooper())
 
     private var keepAliveRunnable: Runnable? = null
     private var sessionRenewRunnable: Runnable? = null
+    private var reconnectRunnable: Runnable? = null
 
+    @Volatile
     private var manuallyClosed = false
+
+    @Volatile
     private var setupCompleted = false
+
+    @Volatile
+    private var reconnectScheduled = false
 
     fun connect() {
 
-        manuallyClosed = false
-        setupCompleted = false
+        if (manuallyClosed) {
+            return
+        }
+
         cancelTimers()
+
+        setupCompleted = false
+        reconnectScheduled = false
 
         val url =
             "wss://generativelanguage.googleapis.com/ws/" +
-            "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent" +
-            "?key=$apiKey"
+                "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent" +
+                "?key=$apiKey"
 
-        val request = Request.Builder()
-            .url(url)
-            .build()
+        val request =
+            Request.Builder()
+                .url(url)
+                .build()
 
-        webSocket = client.newWebSocket(
-            request,
-            object : WebSocketListener() {
+        webSocket =
+            client.newWebSocket(
+                request,
+                object : WebSocketListener() {
 
-                override fun onOpen(
-                    webSocket: WebSocket,
-                    response: Response
-                ) {
-                    sendSetup()
-                }
+                    override fun onOpen(
+                        webSocket: WebSocket,
+                        response: Response
+                    ) {
 
-                override fun onMessage(
-                    webSocket: WebSocket,
-                    text: String
-                ) {
-                    handleMessage(text)
-                }
+                        sendSetup()
+                    }
 
-                override fun onMessage(
-                    webSocket: WebSocket,
-                    bytes: ByteString
-                ) {
-                    handleMessage(bytes.utf8())
-                }
+                    override fun onMessage(
+                        webSocket: WebSocket,
+                        text: String
+                    ) {
 
-                override fun onFailure(
-                    webSocket: WebSocket,
-                    t: Throwable,
-                    response: Response?
-                ) {
+                        handleMessage(text)
+                    }
 
-                    setupCompleted = false
+                    override fun onMessage(
+                        webSocket: WebSocket,
+                        bytes: ByteString
+                    ) {
 
-                    onError(
-                        "WebSocket error: " +
-                            "${t.javaClass.simpleName}: ${t.message}"
-                    )
+                        handleMessage(
+                            bytes.utf8()
+                        )
+                    }
 
-                    cancelTimers()
-                    onDisconnected()
+                    override fun onFailure(
+                        webSocket: WebSocket,
+                        t: Throwable,
+                        response: Response?
+                    ) {
 
-                    scheduleReconnect()
-                }
+                        setupCompleted = false
 
-                override fun onClosed(
-                    webSocket: WebSocket,
-                    code: Int,
-                    reason: String
-                ) {
+                        onError(
+                            "WebSocket error: " +
+                                "${t.javaClass.simpleName}: ${t.message}"
+                        )
 
-                    setupCompleted = false
+                        cancelTimers()
 
-                    onError(
-                        "WebSocket closed: code=$code reason=$reason"
-                    )
+                        onDisconnected()
 
-                    cancelTimers()
-                    onDisconnected()
-
-                    if (!manuallyClosed) {
                         scheduleReconnect()
                     }
+
+                    override fun onClosed(
+                        webSocket: WebSocket,
+                        code: Int,
+                        reason: String
+                    ) {
+
+                        setupCompleted = false
+
+                        cancelTimers()
+
+                        if (!manuallyClosed) {
+
+                            onError(
+                                "WebSocket closed: " +
+                                    "code=$code reason=$reason"
+                            )
+
+                            onDisconnected()
+
+                            scheduleReconnect()
+                        }
+                    }
                 }
-            }
-        )
+            )
     }
 
     private fun sendSetup() {
 
-        val setup = JSONObject().apply {
+        val setup =
+            JSONObject().apply {
 
-            put(
-                "setup",
-                JSONObject().apply {
+                put(
+                    "setup",
+                    JSONObject().apply {
 
-                    put("model", model)
+                        put(
+                            "model",
+                            model
+                        )
 
-                    put(
-                        "systemInstruction",
-                        JSONObject().apply {
-                            put(
-                                "parts",
-                                JSONArray().put(
-                                    JSONObject().put(
-                                        "text",
-                                        systemPrompt
+                        put(
+                            "systemInstruction",
+                            JSONObject().apply {
+
+                                put(
+                                    "parts",
+                                    JSONArray().put(
+                                        JSONObject().put(
+                                            "text",
+                                            systemPrompt
+                                        )
                                     )
                                 )
-                            )
-                        }
-                    )
+                            }
+                        )
 
-                    put(
-                        "generationConfig",
-                        JSONObject().apply {
+                        put(
+                            "generationConfig",
+                            JSONObject().apply {
 
-                            put(
-                                "responseModalities",
-                                JSONArray().put("AUDIO")
-                            )
-
-                            put(
-                                "speechConfig",
-                                JSONObject().apply {
-
-                                    put(
-                                        "voiceConfig",
-                                        JSONObject().apply {
-
-                                            put(
-                                                "prebuiltVoiceConfig",
-                                                JSONObject().put(
-                                                    "voiceName",
-                                                    voiceName
-                                                )
-                                            )
-                                        }
+                                put(
+                                    "responseModalities",
+                                    JSONArray().put(
+                                        "AUDIO"
                                     )
-                                }
-                            )
+                                )
 
-                            put("temperature", 0.9)
-                        }
-                    )
+                                put(
+                                    "speechConfig",
+                                    JSONObject().apply {
 
-                    put(
-                        "outputAudioTranscription",
-                        JSONObject()
-                    )
+                                        put(
+                                            "voiceConfig",
+                                            JSONObject().apply {
 
-                    put(
-                        "inputAudioTranscription",
-                        JSONObject()
-                    )
+                                                put(
+                                                    "prebuiltVoiceConfig",
+                                                    JSONObject().put(
+                                                        "voiceName",
+                                                        voiceName
+                                                    )
+                                                )
+                                            }
+                                        )
+                                    }
+                                )
 
-                    put(
-                        "tools",
-                        JSONArray().put(
-                            JSONObject().put(
-                                "functionDeclarations",
-                                ToolDeclarations.all()
+                                /*
+                                 * Lower temperature makes
+                                 * short voice responses more
+                                 * predictable.
+                                 */
+                                put(
+                                    "temperature",
+                                    0.7
+                                )
+                            }
+                        )
+
+                        /*
+                         * Keep transcription enabled.
+                         */
+                        put(
+                            "outputAudioTranscription",
+                            JSONObject()
+                        )
+
+                        put(
+                            "inputAudioTranscription",
+                            JSONObject()
+                        )
+
+                        put(
+                            "tools",
+                            JSONArray().put(
+                                JSONObject().put(
+                                    "functionDeclarations",
+                                    ToolDeclarations.all()
+                                )
                             )
                         )
-                    )
-                }
-            )
-        }
+                    }
+                )
+            }
 
-        val sent = webSocket?.send(setup.toString()) ?: false
+        val sent =
+            webSocket?.send(
+                setup.toString()
+            ) ?: false
 
         if (!sent) {
-            onError("Failed to send Gemini setup message.")
+
+            onError(
+                "Failed to send Gemini setup message."
+            )
         }
     }
 
-    private fun handleMessage(text: String) {
+    private fun handleMessage(
+        text: String
+    ) {
 
         try {
 
-            val json = JSONObject(text)
+            val json =
+                JSONObject(text)
 
-            if (json.has("setupComplete")) {
+            /*
+             * Setup complete.
+             */
+            if (
+                json.has(
+                    "setupComplete"
+                )
+            ) {
 
                 setupCompleted = true
 
                 onSetupComplete()
 
                 scheduleKeepAlive()
+
                 scheduleSessionRenew()
 
                 return
             }
 
-            json.optJSONObject("toolCall")?.let { toolCall ->
+            /*
+             * Tool calls.
+             */
+            json.optJSONObject(
+                "toolCall"
+            )?.let { toolCall ->
 
                 val calls =
-                    toolCall.optJSONArray("functionCalls")
-                        ?: return@let
-
-                for (i in 0 until calls.length()) {
-
-                    val call =
-                        calls.getJSONObject(i)
-
-                    val id =
-                        call.optString("id")
-
-                    val name =
-                        call.optString("name")
-
-                    val args =
-                        call.optJSONObject("args")
-                            ?: JSONObject()
-
-                    onToolCall(
-                        id,
-                        name,
-                        args
+                    toolCall.optJSONArray(
+                        "functionCalls"
                     )
+
+                if (calls != null) {
+
+                    for (
+                        i in 0 until calls.length()
+                    ) {
+
+                        val call =
+                            calls.getJSONObject(i)
+
+                        val id =
+                            call.optString(
+                                "id"
+                            )
+
+                        val name =
+                            call.optString(
+                                "name"
+                            )
+
+                        val args =
+                            call.optJSONObject(
+                                "args"
+                            ) ?: JSONObject()
+
+                        onToolCall(
+                            id,
+                            name,
+                            args
+                        )
+                    }
                 }
 
                 return
             }
 
             val serverContent =
-                json.optJSONObject("serverContent")
-                    ?: return
+                json.optJSONObject(
+                    "serverContent"
+                ) ?: return
 
+            /*
+             * ==================================================
+             * CRITICAL: GEMINI SERVER INTERRUPTION
+             * ==================================================
+             *
+             * When the user starts talking while Jarvis is
+             * speaking, Gemini can report:
+             *
+             * serverContent.interrupted = true
+             *
+             * We immediately notify JarvisService so it can
+             * clear AudioTrack/playback.
+             */
+            if (
+                serverContent.optBoolean(
+                    "interrupted",
+                    false
+                )
+            ) {
+
+                onInterrupted()
+
+                /*
+                 * Do not process stale model audio from
+                 * this server message.
+                 */
+                return
+            }
+
+            /*
+             * Model audio.
+             */
             val modelTurn =
-                serverContent.optJSONObject("modelTurn")
+                serverContent.optJSONObject(
+                    "modelTurn"
+                )
 
             modelTurn
-                ?.optJSONArray("parts")
+                ?.optJSONArray(
+                    "parts"
+                )
                 ?.let { parts ->
 
-                    for (i in 0 until parts.length()) {
+                    for (
+                        i in 0 until parts.length()
+                    ) {
 
                         val part =
                             parts.getJSONObject(i)
 
                         val inlineData =
-                            part.optJSONObject("inlineData")
+                            part.optJSONObject(
+                                "inlineData"
+                            )
 
                         val data =
-                            inlineData?.optString("data")
+                            inlineData?.optString(
+                                "data"
+                            )
 
-                        if (!data.isNullOrEmpty()) {
+                        if (
+                            !data.isNullOrEmpty()
+                        ) {
 
                             try {
 
@@ -291,36 +439,70 @@ class GeminiLiveClient(
                                         Base64.DEFAULT
                                     )
 
-                                onAudioChunk(audio)
+                                if (
+                                    audio.isNotEmpty()
+                                ) {
+
+                                    onAudioChunk(
+                                        audio
+                                    )
+                                }
 
                             } catch (e: Exception) {
 
                                 onError(
-                                    "Audio decode error: ${e.message}"
+                                    "Audio decode error: " +
+                                        e.message
                                 )
                             }
                         }
                     }
                 }
 
+            /*
+             * Input transcription.
+             */
             serverContent
-                .optJSONObject("outputTranscription")
-                ?.optString("text")
-                ?.takeIf { it.isNotEmpty() }
-                ?.let(onOutputTranscript)
+                .optJSONObject(
+                    "inputTranscription"
+                )
+                ?.optString(
+                    "text"
+                )
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?.let {
+                    onInputTranscript(it)
+                }
 
+            /*
+             * Output transcription.
+             */
             serverContent
-                .optJSONObject("inputTranscription")
-                ?.optString("text")
-                ?.takeIf { it.isNotEmpty() }
-                ?.let(onInputTranscript)
+                .optJSONObject(
+                    "outputTranscription"
+                )
+                ?.optString(
+                    "text"
+                )
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?.let {
+                    onOutputTranscript(it)
+                }
 
+            /*
+             * Gemini finished the conversational turn.
+             */
             if (
                 serverContent.optBoolean(
                     "turnComplete",
                     false
                 )
             ) {
+
                 onTurnComplete()
             }
 
@@ -332,13 +514,18 @@ class GeminiLiveClient(
         }
     }
 
-    fun sendAudioChunk(pcm: ByteArray) {
+    fun sendAudioChunk(
+        pcm: ByteArray
+    ) {
 
-        if (!setupCompleted) {
+        if (
+            !setupCompleted ||
+            pcm.isEmpty()
+        ) {
             return
         }
 
-        val b64 =
+        val base64 =
             Base64.encodeToString(
                 pcm,
                 Base64.NO_WRAP
@@ -357,7 +544,7 @@ class GeminiLiveClient(
 
                                 put(
                                     "data",
-                                    b64
+                                    base64
                                 )
 
                                 put(
@@ -376,6 +563,7 @@ class GeminiLiveClient(
             ) ?: false
 
         if (!sent) {
+
             onError(
                 "Audio send failed: WebSocket is not open."
             )
@@ -404,8 +592,16 @@ class GeminiLiveClient(
                             JSONArray().put(
                                 JSONObject().apply {
 
-                                    put("id", id)
-                                    put("name", name)
+                                    put(
+                                        "id",
+                                        id
+                                    )
+
+                                    put(
+                                        "name",
+                                        name
+                                    )
+
                                     put(
                                         "response",
                                         response
@@ -422,6 +618,13 @@ class GeminiLiveClient(
         )
     }
 
+    /*
+     * Explicit client-side interruption.
+     *
+     * This is kept as a secondary mechanism.
+     * Server-side interrupted events remain the primary
+     * interruption path.
+     */
     fun sendInterrupt() {
 
         if (!setupCompleted) {
@@ -465,15 +668,21 @@ class GeminiLiveClient(
                         setupCompleted
                     ) {
 
+                        /*
+                         * Silent PCM keep-alive.
+                         *
+                         * 320 bytes = 10 ms at 16 kHz
+                         * mono 16-bit.
+                         */
                         sendAudioChunk(
                             ByteArray(320)
                         )
-                    }
 
-                    handler.postDelayed(
-                        this,
-                        8000
-                    )
+                        handler.postDelayed(
+                            this,
+                            8000
+                        )
+                    }
                 }
             }
 
@@ -488,7 +697,9 @@ class GeminiLiveClient(
         sessionRenewRunnable =
             Runnable {
 
-                if (!manuallyClosed) {
+                if (
+                    !manuallyClosed
+                ) {
 
                     disconnect(
                         manual = false
@@ -506,16 +717,27 @@ class GeminiLiveClient(
 
     private fun scheduleReconnect() {
 
-        if (manuallyClosed) {
+        if (
+            manuallyClosed ||
+            reconnectScheduled
+        ) {
             return
         }
 
-        handler.postDelayed(
-            {
+        reconnectScheduled = true
+
+        reconnectRunnable =
+            Runnable {
+
+                reconnectScheduled = false
+
                 if (!manuallyClosed) {
                     connect()
                 }
-            },
+            }
+
+        handler.postDelayed(
+            reconnectRunnable!!,
             3000
         )
     }
@@ -530,8 +752,15 @@ class GeminiLiveClient(
             handler.removeCallbacks(it)
         }
 
+        reconnectRunnable?.let {
+            handler.removeCallbacks(it)
+        }
+
         keepAliveRunnable = null
         sessionRenewRunnable = null
+        reconnectRunnable = null
+
+        reconnectScheduled = false
     }
 
     fun disconnect(
@@ -548,6 +777,7 @@ class GeminiLiveClient(
         )
 
         webSocket = null
+
         setupCompleted = false
     }
 }

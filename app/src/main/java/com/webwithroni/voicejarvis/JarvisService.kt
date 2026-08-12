@@ -387,6 +387,34 @@ class JarvisService : Service() {
                 }
             },
 
+            onInterrupted = {
+
+                handler.post {
+
+                    /*
+                     * Gemini detected that the user interrupted
+                     * Jarvis while it was speaking.
+                     *
+                     * Immediately remove queued audio.
+                     */
+                    audioEngine.clearPlaybackQueue()
+
+                    audioEngine.micSendEnabled = true
+
+                    noMoreAudioIncoming = true
+
+                    pushState(
+                        JarvisState.HEARING,
+                        "HEARING",
+                        "Go ahead…"
+                    )
+
+                    log(
+                        "Jarvis interrupted by user."
+                    )
+                }
+            },
+
             onToolCall = { id, name, args ->
 
                 val result =
