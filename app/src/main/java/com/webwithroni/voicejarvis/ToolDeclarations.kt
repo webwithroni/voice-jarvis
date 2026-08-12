@@ -65,5 +65,29 @@ object ToolDeclarations {
 
         put(fn("search_web", "Search the web for real-time or current information: news, prices, scores, weather, or any fact that may have changed recently.",
             schema(JSONObject().put("query", strProp("The search query")), listOf("query"))))
+
+        put(fn("media_control", "Control whatever media is currently playing on the phone.",
+            schema(JSONObject().put("action", strProp("One of: play_pause, next, previous, stop")), listOf("action"))))
+
+        put(fn("set_volume", "Set the media volume as a percentage.",
+            schema(JSONObject().put("percent", intProp("Volume level 0-100")), listOf("percent"))))
+
+        put(fn("open_browser", "Open the default web browser, optionally at a specific URL.",
+            schema(JSONObject().put("url", strProp("Optional URL to open; leave empty for homepage")), listOf())))
+
+        put(fn("search_google", "Search Google for a query and show the results in the browser.",
+            schema(JSONObject().put("query", strProp("The search query")), listOf("query"))))
+
+        put(fn("navigate_to", "Start turn-by-turn navigation in Google Maps to a destination.",
+            schema(JSONObject().put("destination", strProp("Place name or address to navigate to")), listOf("destination"))))
+
+        put(fn("lookup_contact", "Find a contact's phone number without calling or messaging them.",
+            schema(JSONObject().put("name", strProp("Contact name to look up")), listOf("name"))))
+
+        put(fn("set_clipboard", "Copy text to the device clipboard.",
+            schema(JSONObject().put("text", strProp("Text to copy")), listOf("text"))))
+
+        put(fn("get_location", "Get the user's current address and coordinates.",
+            schema(JSONObject(), listOf())))
     }
 }

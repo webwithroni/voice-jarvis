@@ -95,7 +95,8 @@ class MainActivity : AppCompatActivity() {
         val neededPermissions = listOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_CONTACTS
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.ACCESS_FINE_LOCATION
         ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
 
         if (neededPermissions.isNotEmpty()) {
@@ -129,7 +130,7 @@ class MainActivity : AppCompatActivity() {
             "You are speaking ALOUD, so keep responses short, natural, and conversational " +
             "(1-3 sentences), with no markdown or lists. " +
             "You have tools to call contacts, send WhatsApp/SMS drafts, open apps, control the flashlight, " +
-            "and set alarms or timers. Use them when the user asks for these actions, then briefly confirm what you did. " +
+            "and set alarms or timers. You can also control media playback, adjust volume, open the browser, search Google, start navigation, look up contact numbers, copy text to clipboard, and get the current location. Use these when the user asks for such actions, then briefly confirm what you did. " +
             "You also have a search_web tool for anything current or time-sensitive: news, prices, scores, weather, " +
             "today's date, or facts that may have changed recently. Always use it instead of guessing for such questions."
 
