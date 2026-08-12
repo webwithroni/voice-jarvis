@@ -108,6 +108,15 @@ object ToolDeclarations {
         put(fn("go_back", "Press the Android back button.", schema(JSONObject(), listOf())))
         put(fn("go_home", "Go to the Android home screen.", schema(JSONObject(), listOf())))
 
+        put(fn("send_last_message", "Tap the Send button to actually send the message that was just drafted in WhatsApp or SMS. Only call this after the user explicitly confirms they want it sent.",
+            schema(JSONObject(), listOf())))
+
+        put(fn("answer_call", "Answer the currently ringing incoming call.",
+            schema(JSONObject(), listOf())))
+
+        put(fn("end_call", "End or decline the current call.",
+            schema(JSONObject(), listOf())))
+
         put(fn("open_accessibility_settings", "Open Android's Accessibility settings so the user can enable Jarvis's screen-control permission. Only use this if a screen-automation action fails because the permission isn't granted.",
             schema(JSONObject(), listOf())))
     }

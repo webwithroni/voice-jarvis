@@ -12,8 +12,8 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.BatteryManager
 import android.provider.AlarmClock
-import android.provider.Settings
 import android.provider.ContactsContract
+import android.provider.Settings
 import android.view.KeyEvent
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
@@ -51,6 +51,9 @@ class ToolExecutor(private val context: Context) {
                 "go_back" -> goBack()
                 "go_home" -> goHome()
                 "open_accessibility_settings" -> openAccessibilitySettings()
+                "send_last_message" -> sendLastMessage()
+                "answer_call" -> answerCall()
+                "end_call" -> endCall()
                 else -> result(false, "Unknown tool: $name")
             }
         } catch (e: Exception) {
@@ -96,7 +99,7 @@ class ToolExecutor(private val context: Context) {
         val intent = Intent(Intent.ACTION_VIEW, uri).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
         return try {
             context.startActivity(intent)
-            result(true, "Opened WhatsApp chat with $nameOrNumber, message ready to send")
+            result(true, "WhatsApp message drafted for $nameOrNumber. Ask the user to confirm before sending.")
         } catch (e: Exception) {
             result(false, "WhatsApp is not installed")
         }
@@ -109,19 +112,20 @@ class ToolExecutor(private val context: Context) {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         context.startActivity(intent)
-        return result(true, "Opened SMS to $nameOrNumber, message ready to send")
+        return result(true, "SMS drafted for $nameOrNumber. Ask the user to confirm before sending.")
     }
 
     private fun openApp(appName: String): JSONObject {
         val pm = context.packageManager
-        val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-        val match = apps.firstOrNull { pm.getApplicationLabel(it).toString().contains(appName, ignoreCase = true) }
-            ?: return result(false, "App '$appName' not found")
-        val launchIntent = pm.getLaunchIntentForPackage(match.packageName)
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val resolves = pm.queryIntentActivities(launcherIntent, PackageManager.MATCH_ALL)
+        val match = resolves.firstOrNull { it.loadLabel(pm).toString().contains(appName, ignoreCase = true) }
+            ?: return result(false, "App '$appName' not found on this device")
+        val launch = pm.getLaunchIntentForPackage(match.activityInfo.packageName)
             ?: return result(false, "Could not launch '$appName'")
-        launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        context.startActivity(launchIntent)
-        return result(true, "Opened ${pm.getApplicationLabel(match)}")
+        launch.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        context.startActivity(launch)
+        return result(true, "Opened ${match.loadLabel(pm)}")
     }
 
     private fun toggleFlashlight(on: Boolean): JSONObject {
@@ -261,10 +265,38 @@ class ToolExecutor(private val context: Context) {
         return result(true, "Copied to clipboard")
     }
 
+    private fun getLocation(): JSONObject {
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) return result(false, "Location permission not granted")
+
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+        var location: android.location.Location? = null
+        for (p in providers) {
+            try {
+                val loc = lm.getLastKnownLocation(p)
+                if (loc != null) { location = loc; break }
+            } catch (e: Exception) { }
+        }
+        if (location == null) return result(false, "Could not determine current location")
+
+        return try {
+            val geocoder = Geocoder(context, Locale.getDefault())
+            @Suppress("DEPRECATION")
+            val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+            val addressLine = addresses?.firstOrNull()?.getAddressLine(0)
+            if (!addressLine.isNullOrBlank()) result(true, addressLine)
+            else result(true, "Lat ${location.latitude}, Lng ${location.longitude}")
+        } catch (e: Exception) {
+            result(true, "Lat ${location.latitude}, Lng ${location.longitude}")
+        }
+    }
+
     private fun accessibilityService() = VoiceJarvisAccessibilityService.instance
 
     private fun readScreen(): JSONObject {
-        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled yet — opening settings.").also { openAccessibilitySettings() }
+        val svc = accessibilityService()
+            ?: return result(false, "Screen automation permission not enabled yet — opening settings.").also { openAccessibilitySettings() }
         return result(true, svc.readScreen())
     }
 
@@ -299,30 +331,21 @@ class ToolExecutor(private val context: Context) {
         return result(true, "Opened Accessibility settings — please enable Voice Jarvis there.")
     }
 
-    private fun getLocation(): JSONObject {
-        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) return result(false, "Location permission not granted")
+    private fun sendLastMessage(): JSONObject {
+        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled")
+        return if (svc.tapByTextMatch(listOf("Send"))) result(true, "Message sent")
+        else result(false, "Could not find a Send button on screen")
+    }
 
-        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
-        var location: android.location.Location? = null
-        for (p in providers) {
-            try {
-                val loc = lm.getLastKnownLocation(p)
-                if (loc != null) { location = loc; break }
-            } catch (e: Exception) { }
-        }
-        if (location == null) return result(false, "Could not determine current location")
+    private fun answerCall(): JSONObject {
+        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled")
+        return if (svc.tapByTextMatch(listOf("Answer", "Accept", "Answer call"))) result(true, "Call answered")
+        else result(false, "Could not find an answer button — the call may have already ended")
+    }
 
-        return try {
-            val geocoder = Geocoder(context, Locale.getDefault())
-            @Suppress("DEPRECATION")
-            val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
-            val addressLine = addresses?.firstOrNull()?.getAddressLine(0)
-            if (!addressLine.isNullOrBlank()) result(true, addressLine)
-            else result(true, "Lat ${location.latitude}, Lng ${location.longitude}")
-        } catch (e: Exception) {
-            result(true, "Lat ${location.latitude}, Lng ${location.longitude}")
-        }
+    private fun endCall(): JSONObject {
+        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled")
+        return if (svc.tapByTextMatch(listOf("End call", "Hang up", "Decline", "End"))) result(true, "Call ended")
+        else result(false, "Could not find an end call button")
     }
 }

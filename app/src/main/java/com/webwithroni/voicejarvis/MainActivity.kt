@@ -1,10 +1,14 @@
 package com.webwithroni.voicejarvis
 
 import android.Manifest
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.os.IBinder
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
@@ -12,12 +16,10 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import org.json.JSONObject
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
-    private val micPermissionCode = 100
-    private val ampThreshold = 0.06f
+    private val permissionCode = 100
 
     private lateinit var statusText: TextView
     private lateinit var stateLabel: TextView
@@ -30,19 +32,31 @@ class MainActivity : AppCompatActivity() {
     private lateinit var jarvisBubble: TextView
     private lateinit var debugScroll: View
 
-    private lateinit var audioEngine: AudioEngine
-    private lateinit var toolExecutor: ToolExecutor
-    private var geminiClient: GeminiLiveClient? = null
-    private val handler = Handler(Looper.getMainLooper())
-
-    private var isPaused = false
-    private var autoPausedByLifecycle = false
+    private var service: JarvisService? = null
+    private var bound = false
     private var debugVisible = false
-    private var voiceActive = false
-    private var noMoreAudioIncoming = true
-    private var silenceRunnable: Runnable? = null
-    private var pendingUserText = ""
-    private var pendingJarvisText = ""
+
+    private val connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            val localBinder = binder as JarvisService.LocalBinder
+            service = localBinder.getService()
+            service?.listener = this@MainActivity
+            bound = true
+
+            service?.let { svc ->
+                onState(svc.currentState, svc.currentLabel, svc.currentSub)
+                statusText.text = svc.getLogSnapshot()
+                val (u, j) = svc.getLastConversation()
+                if (u != null) onConversation(u, j)
+                reflectMuteUi()
+            }
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            service = null
+            bound = false
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,14 +74,8 @@ class MainActivity : AppCompatActivity() {
         jarvisBubble = findViewById(R.id.jarvisBubble)
         debugScroll = findViewById(R.id.debugScroll)
         statusText.setTextIsSelectable(true)
-        statusText.text = ""
 
-        muteIcon.isClickable = true
-        muteIcon.isFocusable = true
-        muteIcon.setOnClickListener {
-            Toast.makeText(this, "Mute tapped", Toast.LENGTH_SHORT).show()
-            toggleMute()
-        }
+        muteIcon.setOnClickListener { service?.toggleMute(); reflectMuteUi() }
         muteLabel.setOnClickListener { muteIcon.performClick() }
 
         findViewById<View>(R.id.settingsButton).setOnClickListener {
@@ -82,133 +90,50 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        toolExecutor = ToolExecutor(this)
-        audioEngine = AudioEngine(
-            onMicChunk = { chunk -> geminiClient?.sendAudioChunk(chunk) },
-            onMicAmplitude = { level -> runOnUiThread { handleMicAmplitude(level) } },
-            onPlaybackAmplitude = { level -> runOnUiThread { orb.setAmplitude(level * 2.2f) } },
-            onPlaybackIdle = { runOnUiThread { handlePlaybackIdle() } }
-        )
-
         setJarvisState(JarvisState.THINKING, "CONNECTING", "Waking up Jarvis…")
+        ensurePermissionsThenStart()
+    }
 
-        val neededPermissions = listOf(
+    private fun ensurePermissionsThenStart() {
+        val needed = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.CALL_PHONE,
             Manifest.permission.READ_CONTACTS,
             Manifest.permission.ACCESS_FINE_LOCATION
-        ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-
-        if (neededPermissions.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, neededPermissions.toTypedArray(), micPermissionCode)
-        } else {
-            connectGemini()
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            needed.add(Manifest.permission.POST_NOTIFICATIONS)
         }
+        val missing = needed.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missing.toTypedArray(), permissionCode)
+        } else {
+            startJarvisService()
+        }
+    }
+
+    private fun startJarvisService() {
+        val intent = Intent(this, JarvisService::class.java)
+        ContextCompat.startForegroundService(this, intent)
+        bindService(intent, connection, Context.BIND_AUTO_CREATE)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != permissionCode) return
         val micIndex = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
         val micGranted = micIndex != -1 && grantResults.getOrNull(micIndex) == PackageManager.PERMISSION_GRANTED
-        if (requestCode == micPermissionCode && micGranted) {
-            connectGemini()
-        } else if (requestCode == micPermissionCode) {
-            setJarvisState(JarvisState.ERROR, "TRY AGAIN", "Microphone access is needed to listen.")
-        }
+        if (micGranted) startJarvisService()
+        else setJarvisState(JarvisState.ERROR, "TRY AGAIN", "Microphone access is needed to listen.")
     }
 
-    private fun connectGemini() {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isBlank()) {
-            setJarvisState(JarvisState.ERROR, "TRY AGAIN", "Gemini API key missing.")
-            log("Gemini API key is empty — set GEMINI_API_KEY secret.")
-            return
-        }
-
-        val systemPrompt = "You are Jarvis, Roni's personal voice assistant. " +
-            "Reply in the same mix of Hindi, Bengali, or English the user used. " +
-            "You are speaking ALOUD, so keep responses short, natural, and conversational " +
-            "(1-3 sentences), with no markdown or lists. " +
-            "You have tools to call contacts, send WhatsApp/SMS drafts, open apps, control the flashlight, " +
-            "and set alarms or timers. You can also control media playback, adjust volume, open the browser, search Google, start navigation, look up contact numbers, copy text to clipboard, and get the current location. Use these when the user asks for such actions, then briefly confirm what you did. " +
-            "For anything without a dedicated tool — like ordering food, using a specific app's UI, or any multi-step " +
-            "task inside an app — use read_screen first to see what's on screen, then tap_element/type_text/scroll_screen/go_back " +
-            "to operate it step by step like a human would, re-reading the screen after each action. This is a last resort, " +
-            "only when no direct tool covers the request. " +
-            "You also have a search_web tool for anything current or time-sensitive: news, prices, scores, weather, " +
-            "today's date, or facts that may have changed recently. Always use it instead of guessing for such questions."
-
-        geminiClient = GeminiLiveClient(
-            apiKey = apiKey,
-            systemPrompt = systemPrompt,
-            onSetupComplete = {
-                runOnUiThread {
-                    log("Gemini Live connected.")
-                    audioEngine.startRecording()
-                    audioEngine.startPlayback()
-                    if (!isPaused) setJarvisState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
-                }
-            },
-            onAudioChunk = { bytes ->
-                noMoreAudioIncoming = false
-                audioEngine.micSendEnabled = false
-                audioEngine.enqueuePlayback(bytes)
-                runOnUiThread { if (!isPaused) setJarvisState(JarvisState.SPEAKING, "SPEAKING", "") }
-            },
-            onInputTranscript = { text ->
-                pendingUserText += text
-                runOnUiThread { showConversation(pendingUserText, null) }
-            },
-            onOutputTranscript = { text ->
-                pendingJarvisText += text
-                runOnUiThread { showConversation(pendingUserText, pendingJarvisText) }
-            },
-            onToolCall = { id, name, args ->
-                val toolResult = toolExecutor.execute(name, args)
-                geminiClient?.sendToolResponse(id, name, toolResult)
-                runOnUiThread { log("Tool: $name -> ${toolResult.optString("message")}") }
-            },
-            onTurnComplete = {
-                runOnUiThread {
-                    if (pendingUserText.isNotBlank()) log("You: $pendingUserText")
-                    if (pendingJarvisText.isNotBlank()) log("Jarvis: $pendingJarvisText")
-                    pendingUserText = ""
-                    pendingJarvisText = ""
-                }
-                noMoreAudioIncoming = true
-            },
-            onError = { msg -> runOnUiThread { log(msg) } },
-            onDisconnected = {
-                runOnUiThread {
-                    if (!isPaused) setJarvisState(JarvisState.THINKING, "RECONNECTING", "One moment.")
-                }
-            }
+    private fun reflectMuteUi() {
+        val svc = service ?: return
+        muteLabel.text = if (svc.isPaused) "RESUME" else "MUTE"
+        muteIcon.setImageResource(
+            if (svc.isPaused) android.R.drawable.ic_btn_speak_now
+            else android.R.drawable.ic_lock_silent_mode
         )
-        geminiClient?.connect()
-    }
-
-    private fun handleMicAmplitude(level: Float) {
-        if (isPaused) return
-        orb.setAmplitude(level * 3f)
-        if (level > ampThreshold && audioEngine.micSendEnabled) {
-            if (!voiceActive) {
-                voiceActive = true
-                setJarvisState(JarvisState.HEARING, "HEARING", "Go ahead…")
-            }
-            silenceRunnable?.let { handler.removeCallbacks(it) }
-            silenceRunnable = Runnable {
-                voiceActive = false
-                if (!isPaused) setJarvisState(JarvisState.THINKING, "THINKING", "Let me think.")
-            }
-            handler.postDelayed(silenceRunnable!!, 700)
-        }
-    }
-
-    private fun handlePlaybackIdle() {
-        if (noMoreAudioIncoming && !isPaused) {
-            audioEngine.micSendEnabled = true
-            setJarvisState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
-        }
     }
 
     private fun setJarvisState(state: JarvisState, label: String, sub: String) {
@@ -225,8 +150,6 @@ class MainActivity : AppCompatActivity() {
         microcopy.text = sub
     }
 
-    private fun log(msg: String) { statusText.append("\n$msg") }
-
     private fun showConversation(userText: String?, jarvisText: String?) {
         if (userText.isNullOrBlank() && jarvisText.isNullOrBlank()) return
         conversationCard.visibility = View.VISIBLE
@@ -235,43 +158,31 @@ class MainActivity : AppCompatActivity() {
         else jarvisBubble.visibility = View.GONE
     }
 
-    private fun toggleMute() {
-        isPaused = !isPaused
-        if (isPaused) {
-            audioEngine.micSendEnabled = false
-            audioEngine.clearPlaybackQueue()
-            setJarvisState(JarvisState.PAUSED, "PAUSED", "Tap Resume to continue.")
-            muteLabel.text = "RESUME"
-            muteIcon.setImageResource(android.R.drawable.ic_btn_speak_now)
-        } else {
-            audioEngine.micSendEnabled = true
-            muteLabel.text = "MUTE"
-            muteIcon.setImageResource(android.R.drawable.ic_lock_silent_mode)
-            setJarvisState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
-        }
+    override fun onState(state: JarvisState, label: String, sub: String) {
+        runOnUiThread { setJarvisState(state, label, sub) }
     }
 
-    override fun onPause() {
-        super.onPause()
-        if (!isPaused) {
-            autoPausedByLifecycle = true
-            audioEngine.micSendEnabled = false
-        }
+    override fun onAmplitude(level: Float) {
+        runOnUiThread { orb.setAmplitude(level) }
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (autoPausedByLifecycle && !isPaused) {
-            autoPausedByLifecycle = false
-            audioEngine.micSendEnabled = true
-            setJarvisState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
-        }
+    override fun onLog(message: String) {
+        runOnUiThread { statusText.append("\n$message") }
+    }
+
+    override fun onConversation(userText: String?, jarvisText: String?) {
+        runOnUiThread { showConversation(userText, jarvisText) }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        handler.removeCallbacksAndMessages(null)
-        geminiClient?.disconnect()
-        audioEngine.release()
+        if (bound) {
+            service?.listener = null
+            unbindService(connection)
+            bound = false
+        }
+        // Service is intentionally NOT stopped here — it's a foreground
+        // service and keeps running in the background so Jarvis stays
+        // alive when the screen locks or the app is closed.
     }
 }

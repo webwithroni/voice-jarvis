@@ -100,6 +100,19 @@ class VoiceJarvisAccessibilityService : AccessibilityService() {
         return null
     }
 
+    fun tapByTextMatch(candidates: List<String>): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val elements = mutableListOf<ScreenElement>()
+        collect(root, elements)
+        val target = elements.firstOrNull { el ->
+            el.clickable && candidates.any { c -> el.text.contains(c, ignoreCase = true) }
+        } ?: elements.firstOrNull { el ->
+            candidates.any { c -> el.text.contains(c, ignoreCase = true) }
+        } ?: return false
+        return if (target.node.isClickable) target.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            else tapPoint(target.bounds.centerX(), target.bounds.centerY())
+    }
+
     fun goBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
     fun goHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
 }
