@@ -12,6 +12,7 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.BatteryManager
 import android.provider.AlarmClock
+import android.provider.Settings
 import android.provider.ContactsContract
 import android.view.KeyEvent
 import androidx.core.content.ContextCompat
@@ -43,6 +44,13 @@ class ToolExecutor(private val context: Context) {
                 "lookup_contact" -> lookupContact(args.optString("name"))
                 "set_clipboard" -> setClipboard(args.optString("text"))
                 "get_location" -> getLocation()
+                "read_screen" -> readScreen()
+                "tap_element" -> tapElement(args.optInt("id"))
+                "type_text" -> typeText(args.optInt("id"), args.optString("text"))
+                "scroll_screen" -> scrollScreen(args.optString("direction"))
+                "go_back" -> goBack()
+                "go_home" -> goHome()
+                "open_accessibility_settings" -> openAccessibilitySettings()
                 else -> result(false, "Unknown tool: $name")
             }
         } catch (e: Exception) {
@@ -251,6 +259,44 @@ class ToolExecutor(private val context: Context) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("Jarvis", text))
         return result(true, "Copied to clipboard")
+    }
+
+    private fun accessibilityService() = VoiceJarvisAccessibilityService.instance
+
+    private fun readScreen(): JSONObject {
+        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled yet — opening settings.").also { openAccessibilitySettings() }
+        return result(true, svc.readScreen())
+    }
+
+    private fun tapElement(id: Int): JSONObject {
+        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled")
+        return if (svc.tapElement(id)) result(true, "Tapped element $id") else result(false, "Could not tap element $id")
+    }
+
+    private fun typeText(id: Int, text: String): JSONObject {
+        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled")
+        return if (svc.typeText(id, text)) result(true, "Typed text into element $id") else result(false, "Could not type into element $id")
+    }
+
+    private fun scrollScreen(direction: String): JSONObject {
+        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled")
+        return if (svc.scroll(direction)) result(true, "Scrolled $direction") else result(false, "Nothing scrollable found")
+    }
+
+    private fun goBack(): JSONObject {
+        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled")
+        return result(svc.goBack(), "Pressed back")
+    }
+
+    private fun goHome(): JSONObject {
+        val svc = accessibilityService() ?: return result(false, "Screen automation permission not enabled")
+        return result(svc.goHome(), "Went to home screen")
+    }
+
+    private fun openAccessibilitySettings(): JSONObject {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
+        context.startActivity(intent)
+        return result(true, "Opened Accessibility settings — please enable Voice Jarvis there.")
     }
 
     private fun getLocation(): JSONObject {

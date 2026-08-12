@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Voice Jarvis</string>
+    <string name="accessibility_service_description">Lets Jarvis read your screen and tap/type on your behalf when you ask it to control an app.</string>
 </resources>

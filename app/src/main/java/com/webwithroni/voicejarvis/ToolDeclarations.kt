@@ -89,5 +89,26 @@ object ToolDeclarations {
 
         put(fn("get_location", "Get the user's current address and coordinates.",
             schema(JSONObject(), listOf())))
+
+        put(fn("read_screen", "Read the current screen contents as a numbered list of elements. Use this first when you need to control an app that has no dedicated tool.",
+            schema(JSONObject(), listOf())))
+
+        put(fn("tap_element", "Tap a screen element by its numeric id from the most recent read_screen call.",
+            schema(JSONObject().put("id", intProp("The element id from read_screen")), listOf("id"))))
+
+        put(fn("type_text", "Type text into a screen element by its numeric id from the most recent read_screen call.",
+            schema(JSONObject()
+                .put("id", intProp("The element id from read_screen"))
+                .put("text", strProp("Text to type")),
+                listOf("id", "text"))))
+
+        put(fn("scroll_screen", "Scroll the current screen up or down.",
+            schema(JSONObject().put("direction", strProp("'up' or 'down'")), listOf("direction"))))
+
+        put(fn("go_back", "Press the Android back button.", schema(JSONObject(), listOf())))
+        put(fn("go_home", "Go to the Android home screen.", schema(JSONObject(), listOf())))
+
+        put(fn("open_accessibility_settings", "Open Android's Accessibility settings so the user can enable Jarvis's screen-control permission. Only use this if a screen-automation action fails because the permission isn't granted.",
+            schema(JSONObject(), listOf())))
     }
 }
