@@ -1,0 +1,45 @@
+rules_version = '2';
+
+service cloud.firestore {
+
+  match /databases/{database}/documents {
+
+    /*
+     * Every user's private Voice Jarvis data.
+     *
+     * A Firebase client may only access its own UID.
+     */
+    match /users/{userId} {
+
+      allow read, write: if request.auth != null
+                        && request.auth.uid == userId;
+
+      match /{document=**} {
+
+        allow read, write: if request.auth != null
+                          && request.auth.uid == userId;
+      }
+    }
+
+    /*
+     * Training data is intentionally NOT client writable.
+     *
+     * This will later be populated by a trusted backend/
+     * controlled processing pipeline.
+     */
+    match /training_candidates/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /training_dataset/{document=**} {
+      allow read, write: if false;
+    }
+
+    /*
+     * Everything else is denied by default.
+     */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
