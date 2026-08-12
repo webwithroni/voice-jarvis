@@ -93,6 +93,27 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         super.onCreate(savedInstanceState)
         CrashLogger.install(this)
 
+        /*
+         * Firebase authentication runs in the background.
+         * It must never block Jarvis voice startup.
+         *
+         * Conversation sessions are created later,
+         * when an actual voice interaction begins.
+         */
+        FirebaseManager.initialize { success ->
+            if (success) {
+                android.util.Log.d(
+                    "VoiceJarvis",
+                    "Firebase ready."
+                )
+            } else {
+                android.util.Log.w(
+                    "VoiceJarvis",
+                    "Firebase unavailable. Voice continues normally."
+                )
+            }
+        }
+
         if (CrashLogger.hasCrashLog(this)) {
             showCrashRecovery()
             return
