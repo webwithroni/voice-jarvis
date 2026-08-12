@@ -12,9 +12,12 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "0.3.0"
+        versionName = "0.4.0"
         buildConfigField("String", "GEMINI_API_KEY", "\"${project.findProperty("GEMINI_API_KEY") ?: ""}\"")
         buildConfigField("String", "TAVILY_API_KEY", "\"${project.findProperty("TAVILY_API_KEY") ?: ""}\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"${project.findProperty("GROQ_API_KEY") ?: ""}\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"${project.findProperty("OPENROUTER_API_KEY") ?: ""}\"")
+        buildConfigField("String", "DEEPSEEK_API_KEY", "\"${project.findProperty("DEEPSEEK_API_KEY") ?: ""}\"")
     }
 
     buildTypes {

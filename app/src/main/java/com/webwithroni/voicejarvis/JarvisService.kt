@@ -11,7 +11,11 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class JarvisService : Service() {
 
@@ -33,6 +37,12 @@ class JarvisService : Service() {
     private lateinit var toolExecutor: ToolExecutor
     private var geminiClient: GeminiLiveClient? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    private var fallbackSpeech: SpeechController? = null
+    private var fallbackTts: TtsController? = null
+    private var inFallbackMode = false
+    private var consecutiveFailures = 0
 
     var isPaused = false
         private set
@@ -63,6 +73,10 @@ class JarvisService : Service() {
         createNotificationChannel()
         startForeground(NOTIF_ID, buildNotification("Waking up Jarvis…"))
 
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VoiceJarvis::VoiceLock")
+        wakeLock?.acquire(12 * 60 * 60 * 1000L)
+
         toolExecutor = ToolExecutor(this)
         audioEngine = AudioEngine(
             onMicChunk = { chunk -> geminiClient?.sendAudioChunk(chunk) },
@@ -78,15 +92,14 @@ class JarvisService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
-    private fun connectGemini() {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isBlank()) {
-            pushState(JarvisState.ERROR, "TRY AGAIN", "Gemini API key missing.")
-            log("Gemini API key is empty — set GEMINI_API_KEY secret.")
-            return
-        }
+    private fun currentDateTimeLine(): String {
+        val now = SimpleDateFormat("EEEE, d MMMM yyyy, h:mm a", Locale.getDefault()).format(Date())
+        return "Right now it is $now. Always treat this as the current date and time when asked, without needing to search."
+    }
 
-        val systemPrompt = "You are Jarvis, Roni's personal voice assistant. " +
+    private fun buildPrimarySystemPrompt(): String {
+        return currentDateTimeLine() + " " +
+            "You are Jarvis, Roni's personal voice assistant. " +
             "Reply in the same mix of Hindi, Bengali, or English the user used. " +
             "You are speaking ALOUD, so keep responses short, natural, and conversational " +
             "(1-3 sentences), with no markdown or lists. " +
@@ -95,23 +108,39 @@ class JarvisService : Service() {
             "start navigation, look up contact numbers, copy text to clipboard, and get the current location. " +
             "Use these when the user asks for such actions, then briefly confirm what you did. " +
             "Before saying an app isn't installed, always try the open_app tool first — never guess. " +
-            "For anything without a dedicated tool — like ordering food, using a specific app's UI, or any multi-step " +
-            "task inside an app — use read_screen first to see what's on screen, then tap_element/type_text/scroll_screen/go_back " +
-            "to operate it step by step like a human would, re-reading the screen after each action. This is a last resort, " +
-            "only when no direct tool covers the request. " +
-            "IMPORTANT: when you draft a WhatsApp or SMS message with send_whatsapp/send_sms, do NOT claim it was sent — " +
-            "tell the user it's ready and ask 'bhej du?' or similar, and only call send_last_message after they clearly confirm. " +
-            "You can also answer_call or end_call when the user asks — but only end_call if they clearly and recently asked to hang up, " +
-            "never on an ambiguous or misheard word, since this is an irreversible action. " +
-            "You also have a search_web tool for anything current or time-sensitive: news, prices, scores, weather, " +
-            "today's date, or facts that may have changed recently. Always use it instead of guessing for such questions."
+            "For anything without a dedicated tool, use read_screen first, then tap_element/type_text/scroll_screen/go_back " +
+            "to operate it step by step, re-reading the screen after each action. This is a last resort. " +
+            "IMPORTANT: when you draft a WhatsApp or SMS message, do NOT claim it was sent — " +
+            "ask the user to confirm, and only call send_last_message after they clearly confirm. " +
+            "You can answer_call or end_call when asked — only end_call on a clear, recent request, never on an ambiguous word. " +
+            "You have a search_web tool for anything current or time-sensitive. Use it instead of guessing."
+    }
+
+    private fun buildFallbackSystemPrompt(): String {
+        return currentDateTimeLine() + " " +
+            "You are Jarvis, Roni's personal voice assistant, currently running in a lightweight backup mode " +
+            "because the primary voice connection is temporarily unavailable. " +
+            "Reply in the same mix of Hindi, Bengali, or English the user used. Keep replies short and conversational " +
+            "(1-3 sentences), no markdown. You cannot control apps or the device right now — if asked to do something " +
+            "like calling or sending a message, briefly say that full control will be back shortly, once the main connection returns."
+    }
+
+    private fun connectGemini() {
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isBlank()) {
+            pushState(JarvisState.ERROR, "TRY AGAIN", "Gemini API key missing.")
+            log("Gemini API key is empty — set GEMINI_API_KEY secret.")
+            return
+        }
 
         geminiClient = GeminiLiveClient(
             apiKey = apiKey,
-            systemPrompt = systemPrompt,
+            systemPrompt = buildPrimarySystemPrompt(),
             onSetupComplete = {
                 handler.post {
                     log("Gemini Live connected.")
+                    consecutiveFailures = 0
+                    exitFallbackMode()
                     audioEngine.startRecording()
                     audioEngine.startPlayback()
                     if (!isPaused) pushState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
@@ -148,15 +177,86 @@ class JarvisService : Service() {
             onError = { msg -> handler.post { log(msg) } },
             onDisconnected = {
                 handler.post {
-                    if (!isPaused) pushState(JarvisState.THINKING, "RECONNECTING", "One moment.")
+                    consecutiveFailures++
+                    if (consecutiveFailures >= 2 && !inFallbackMode) {
+                        enterFallbackMode()
+                    } else if (!isPaused && !inFallbackMode) {
+                        pushState(JarvisState.THINKING, "RECONNECTING", "One moment.")
+                    }
                 }
             }
         )
         geminiClient?.connect()
     }
 
+    private fun enterFallbackMode() {
+        if (inFallbackMode) return
+        inFallbackMode = true
+        log("Primary voice unavailable — switching to backup mode.")
+        audioEngine.stopRecording()
+        audioEngine.stopPlayback()
+
+        if (fallbackTts == null) {
+            fallbackTts = TtsController(
+                this,
+                onSpeakStart = { pushState(JarvisState.SPEAKING, "SPEAKING", "") },
+                onSpeakDone = { if (inFallbackMode && !isPaused) startFallbackListening() }
+            )
+        }
+        if (fallbackSpeech == null) {
+            fallbackSpeech = SpeechController(
+                this,
+                onFinalResult = { text -> handleFallbackUserSpeech(text) },
+                onError = { msg ->
+                    log(msg)
+                    if (inFallbackMode && !isPaused) handler.postDelayed({ startFallbackListening() }, 1000)
+                },
+                onListeningStateChanged = { listening ->
+                    if (listening) pushState(JarvisState.LISTENING, "LISTENING (BACKUP)", "Limited backup mode.")
+                }
+            )
+        }
+        if (!isPaused) startFallbackListening()
+    }
+
+    private fun exitFallbackMode() {
+        if (!inFallbackMode) return
+        inFallbackMode = false
+        fallbackSpeech?.stop()
+        fallbackTts?.stop()
+        log("Reconnected — full voice restored.")
+    }
+
+    private fun startFallbackListening() {
+        if (inFallbackMode && !isPaused) fallbackSpeech?.startListening()
+    }
+
+    private fun handleFallbackUserSpeech(text: String) {
+        log("You: $text")
+        pushConversation(text, null)
+        pushState(JarvisState.THINKING, "THINKING", "Let me think.")
+        FallbackLLM.ask(
+            systemPrompt = buildFallbackSystemPrompt(),
+            userText = text,
+            onResult = { reply ->
+                handler.post {
+                    log("Jarvis: $reply")
+                    pushConversation(text, reply)
+                    fallbackTts?.speak(reply)
+                }
+            },
+            onError = { err ->
+                handler.post {
+                    log(err)
+                    pushState(JarvisState.ERROR, "TRY AGAIN", "Sorry, say that again?")
+                    if (inFallbackMode && !isPaused) handler.postDelayed({ startFallbackListening() }, 1200)
+                }
+            }
+        )
+    }
+
     private fun handleMicAmplitude(level: Float) {
-        if (isPaused) return
+        if (isPaused || inFallbackMode) return
         updateAmplitude(level * 3f)
         if (level > ampThreshold && audioEngine.micSendEnabled) {
             if (!voiceActive) {
@@ -173,7 +273,7 @@ class JarvisService : Service() {
     }
 
     private fun handlePlaybackIdle() {
-        if (noMoreAudioIncoming && !isPaused) {
+        if (noMoreAudioIncoming && !isPaused && !inFallbackMode) {
             audioEngine.micSendEnabled = true
             pushState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
         }
@@ -182,11 +282,20 @@ class JarvisService : Service() {
     fun toggleMute() {
         isPaused = !isPaused
         if (isPaused) {
-            audioEngine.micSendEnabled = false
-            audioEngine.clearPlaybackQueue()
+            if (inFallbackMode) {
+                fallbackSpeech?.stop()
+                fallbackTts?.stop()
+            } else {
+                audioEngine.micSendEnabled = false
+                audioEngine.clearPlaybackQueue()
+            }
             pushState(JarvisState.PAUSED, "PAUSED", "Tap Resume to continue.")
         } else {
-            audioEngine.micSendEnabled = true
+            if (inFallbackMode) {
+                startFallbackListening()
+            } else {
+                audioEngine.micSendEnabled = true
+            }
             pushState(JarvisState.LISTENING, "LISTENING", "I'm listening.")
         }
     }
@@ -252,5 +361,8 @@ class JarvisService : Service() {
         handler.removeCallbacksAndMessages(null)
         geminiClient?.disconnect()
         audioEngine.release()
+        fallbackSpeech?.stop()
+        fallbackTts?.shutdown()
+        wakeLock?.let { if (it.isHeld) it.release() }
     }
 }
