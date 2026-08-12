@@ -178,7 +178,7 @@ class JarvisService : Service() {
     private fun buildPrimarySystemPrompt(): String {
 
         return """
-            $currentDateTimeLine()
+            ${currentDateTimeLine()}
 
             You are JARVIS, Roni's personal real-time voice assistant.
 
@@ -240,7 +240,7 @@ class JarvisService : Service() {
     private fun buildFallbackSystemPrompt(): String {
 
         return """
-            $currentDateTimeLine()
+            ${currentDateTimeLine()}
 
             You are JARVIS in lightweight backup voice mode.
 
