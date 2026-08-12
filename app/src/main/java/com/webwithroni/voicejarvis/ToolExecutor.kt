@@ -148,19 +148,21 @@ class ToolExecutor(private val context: Context) {
             }
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
+            if (conn.responseCode !in 200..299) return result(false, "Search failed (HTTP " + conn.responseCode + ")")
 
             val responseJson = JSONObject(conn.inputStream.bufferedReader().readText())
             val results = responseJson.optJSONArray("results") ?: JSONArray()
-            val summary = StringBuilder()
+            val lines = mutableListOf<String>()
             for (i in 0 until minOf(results.length(), 3)) {
                 val r = results.getJSONObject(i)
-                summary.append("- ${r.optString("title")}: ${r.optString("content").take(200)}
-")
+                val title = r.optString("title")
+                val snippet = r.optString("content").take(200)
+                lines.add("- " + title + ": " + snippet)
             }
-            if (summary.isEmpty()) result(false, "No results found for '$query'")
-            else result(true, summary.toString().trim())
+            if (lines.isEmpty()) result(false, "No results found for '" + query + "'")
+            else result(true, lines.joinToString(System.lineSeparator()))
         } catch (e: Exception) {
-            result(false, "Search error: ${e.message}")
+            result(false, "Search error: " + e.message)
         }
     }
 
