@@ -1,6 +1,8 @@
 package com.webwithroni.voicejarvis
 
 import android.content.Context
+import android.graphics.Rect
+import android.view.accessibility.AccessibilityNodeInfo
 
 /**
  * Canonical capability execution layer.
@@ -15,7 +17,7 @@ import android.content.Context
  *     ↓
  * RiskEngine
  *     ↓
- * Capture pre-state
+ * RecoveryEngine
  *     ↓
  * ActionExecutor
  *     ↓
@@ -23,9 +25,12 @@ import android.content.Context
  *     ↓
  * Final ActionResult
  *
- * This is intentionally the single entry point for device actions.
+ * Important:
  *
- * Web/research tools may remain on ToolExecutor temporarily.
+ * RecoveryEngine never calls CapabilityBus recursively.
+ *
+ * Recovery is deliberately conservative and currently only retries
+ * the low-risk scroll action using a swipe fallback.
  */
 class CapabilityBus(
     context: Context
@@ -46,9 +51,9 @@ class CapabilityBus(
             context
         )
 
-    private val verificationEngine =
-        VerificationEngine(
-            VoiceJarvisAccessibilityService.instance
+    private val recoveryEngine =
+        RecoveryEngine(
+            executor = executor
         )
 
     /**
@@ -83,6 +88,10 @@ class CapabilityBus(
 
     /**
      * Execute through the complete capability pipeline.
+     *
+     * Security checks happen before recovery.
+     *
+     * Recovery handles execution and verification only.
      */
     fun execute(
         action: String,
@@ -99,9 +108,12 @@ class CapabilityBus(
             )
 
         /*
-         * Security policy is always evaluated before execution.
+         * Security policy is evaluated before execution unless
+         * the caller has already explicitly authorized the action.
          */
-        if (!skipConfirmation) {
+        if (
+            !skipConfirmation
+        ) {
 
             val validation =
                 planner.validate(
@@ -111,139 +123,32 @@ class CapabilityBus(
             if (
                 validation != null
             ) {
+
                 return validation
             }
         }
 
-        /*
-         * Capture the state immediately before the action.
-         *
-         * This is only needed for actions where screen-state
-         * verification makes sense.
-         */
-        val initialFingerprint =
-            if (
-                RiskEngine.requiresVerification(
-                    request.action
-                )
-            ) {
+        return recoveryEngine.execute(
+            request = request,
 
+            verify = {
+                verificationRequest,
+                initialFingerprint ->
+
+                VerificationEngine(
+                    VoiceJarvisAccessibilityService.instance
+                ).verify(
+                    request =
+                        verificationRequest,
+                    initialFingerprint =
+                        initialFingerprint
+                )
+            },
+
+            captureFingerprint = {
                 captureFingerprint()
-
-            } else {
-
-                null
             }
-
-        /*
-         * Execute the actual action.
-         */
-        val executionResult =
-            try {
-
-                executor.execute(
-                    action = request.action,
-                    target = request.target,
-                    parameters = request.parameters,
-                    skipConfirmation = true
-                )
-
-            } catch (
-                e: Exception
-            ) {
-
-                return ActionResult(
-                    status =
-                        ActionStatus.FAILED,
-                    action =
-                        request.action,
-                    message =
-                        "Capability execution failed: " +
-                            (
-                                e.message
-                                    ?: e.javaClass.simpleName
-                            ),
-                    verified = false
-                )
-            }
-
-        /*
-         * Never attempt verification after a hard execution failure.
-         */
-        if (
-            executionResult.status ==
-                ActionStatus.FAILED ||
-            executionResult.status ==
-                ActionStatus.UNAVAILABLE ||
-            executionResult.status ==
-                ActionStatus.REQUIRES_USER
-        ) {
-
-            return executionResult
-        }
-
-        /*
-         * Only verify actions that have an explicit strategy.
-         */
-        if (
-            !RiskEngine.requiresVerification(
-                request.action
-            )
-        ) {
-
-            return executionResult
-        }
-
-        /*
-         * Verify the observed post-state.
-         */
-        val verificationResult =
-            VerificationEngine(
-                VoiceJarvisAccessibilityService.instance
-            ).verify(
-                request = request,
-                initialFingerprint =
-                    initialFingerprint
-            )
-
-        /*
-         * A real verification failure/unknown must not be
-         * silently converted into success.
-         */
-        return when (
-            verificationResult.status
-        ) {
-
-            ActionStatus.VERIFIED -> {
-
-                verificationResult.copy(
-                    data =
-                        executionResult.data +
-                            verificationResult.data
-                )
-            }
-
-            ActionStatus.UNKNOWN -> {
-
-                ActionResult(
-                    status =
-                        ActionStatus.UNKNOWN,
-                    action =
-                        request.action,
-                    message =
-                        verificationResult.message,
-                    verified = false,
-                    data =
-                        executionResult.data +
-                            verificationResult.data
-                )
-            }
-
-            else -> {
-
-                verificationResult
-            }
-        }
+        )
     }
 
     /**
@@ -283,8 +188,8 @@ class CapabilityBus(
     /**
      * Capture the current visible screen.
      *
-     * This intentionally duplicates no screen-node references.
-     * VerificationEngine owns the actual snapshot representation.
+     * Only immutable string data leaves this method.
+     * No AccessibilityNodeInfo reference is retained.
      */
     private fun captureFingerprint(): String? {
 
@@ -298,20 +203,18 @@ class CapabilityBus(
                 service.rootInActiveWindow
                     ?: return null
 
-            /*
-             * Build a lightweight deterministic snapshot locally.
-             *
-             * We do not retain root or child nodes.
-             */
             try {
 
                 val elements =
                     mutableListOf<String>()
 
                 collectFingerprintNodes(
-                    node = root,
-                    output = elements,
-                    depth = 0
+                    node =
+                        root,
+                    output =
+                        elements,
+                    depth =
+                        0
                 )
 
                 buildString {
@@ -347,7 +250,7 @@ class CapabilityBus(
     }
 
     private fun collectFingerprintNodes(
-        node: android.view.accessibility.AccessibilityNodeInfo,
+        node: AccessibilityNodeInfo,
         output: MutableList<String>,
         depth: Int
     ) {
@@ -356,6 +259,7 @@ class CapabilityBus(
             output.size >= 80 ||
             depth > 28
         ) {
+
             return
         }
 
@@ -375,7 +279,7 @@ class CapabilityBus(
                 .orEmpty()
 
         val bounds =
-            android.graphics.Rect()
+            Rect()
 
         node.getBoundsInScreen(
             bounds
@@ -410,7 +314,6 @@ class CapabilityBus(
                     append(',')
 
                     append(bounds.bottom)
-
                 }
             )
         }
@@ -422,6 +325,7 @@ class CapabilityBus(
             if (
                 output.size >= 80
             ) {
+
                 break
             }
 
@@ -434,9 +338,12 @@ class CapabilityBus(
             try {
 
                 collectFingerprintNodes(
-                    node = child,
-                    output = output,
-                    depth = depth + 1
+                    node =
+                        child,
+                    output =
+                        output,
+                    depth =
+                        depth + 1
                 )
 
             } finally {
