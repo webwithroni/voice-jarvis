@@ -83,7 +83,7 @@ object ResearchRouter {
                     cleanQuery
                 )
 
-            if (sources.isEmpty()) {
+            if (sources.length() == 0) {
                 return error(
                     "No useful research sources were found."
                 )
