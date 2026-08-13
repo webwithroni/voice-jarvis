@@ -15,9 +15,13 @@ import android.content.Context
  *     ↓
  * RiskEngine
  *     ↓
+ * Capture pre-state
+ *     ↓
  * ActionExecutor
  *     ↓
- * ActionResult
+ * VerificationEngine
+ *     ↓
+ * Final ActionResult
  *
  * This is intentionally the single entry point for device actions.
  *
@@ -28,7 +32,9 @@ class CapabilityBus(
 ) {
 
     private val capabilityManager =
-        CapabilityManager(context)
+        CapabilityManager(
+            context
+        )
 
     private val planner =
         ActionPlanner(
@@ -40,14 +46,13 @@ class CapabilityBus(
             context
         )
 
+    private val verificationEngine =
+        VerificationEngine(
+            VoiceJarvisAccessibilityService.instance
+        )
+
     /**
      * Plan an action without executing it.
-     *
-     * Future uses:
-     * - confirmation UI
-     * - workflow planning
-     * - risk preview
-     * - multi-step execution
      */
     fun plan(
         action: String,
@@ -77,8 +82,7 @@ class CapabilityBus(
     }
 
     /**
-     * Execute an action through the complete
-     * planning / capability / risk pipeline.
+     * Execute through the complete capability pipeline.
      */
     fun execute(
         action: String,
@@ -94,6 +98,9 @@ class CapabilityBus(
                 parameters = parameters
             )
 
+        /*
+         * Security policy is always evaluated before execution.
+         */
         if (!skipConfirmation) {
 
             val validation =
@@ -101,40 +108,146 @@ class CapabilityBus(
                     request
                 )
 
-            if (validation != null) {
+            if (
+                validation != null
+            ) {
                 return validation
             }
         }
 
-        return try {
+        /*
+         * Capture the state immediately before the action.
+         *
+         * This is only needed for actions where screen-state
+         * verification makes sense.
+         */
+        val initialFingerprint =
+            if (
+                RiskEngine.requiresVerification(
+                    request.action
+                )
+            ) {
 
-            executor.execute(
-                action = request.action,
-                target = request.target,
-                parameters = request.parameters,
-                skipConfirmation = true
+                captureFingerprint()
+
+            } else {
+
+                null
+            }
+
+        /*
+         * Execute the actual action.
+         */
+        val executionResult =
+            try {
+
+                executor.execute(
+                    action = request.action,
+                    target = request.target,
+                    parameters = request.parameters,
+                    skipConfirmation = true
+                )
+
+            } catch (
+                e: Exception
+            ) {
+
+                return ActionResult(
+                    status =
+                        ActionStatus.FAILED,
+                    action =
+                        request.action,
+                    message =
+                        "Capability execution failed: " +
+                            (
+                                e.message
+                                    ?: e.javaClass.simpleName
+                            ),
+                    verified = false
+                )
+            }
+
+        /*
+         * Never attempt verification after a hard execution failure.
+         */
+        if (
+            executionResult.status ==
+                ActionStatus.FAILED ||
+            executionResult.status ==
+                ActionStatus.UNAVAILABLE ||
+            executionResult.status ==
+                ActionStatus.REQUIRES_USER
+        ) {
+
+            return executionResult
+        }
+
+        /*
+         * Only verify actions that have an explicit strategy.
+         */
+        if (
+            !RiskEngine.requiresVerification(
+                request.action
+            )
+        ) {
+
+            return executionResult
+        }
+
+        /*
+         * Verify the observed post-state.
+         */
+        val verificationResult =
+            VerificationEngine(
+                VoiceJarvisAccessibilityService.instance
+            ).verify(
+                request = request,
+                initialFingerprint =
+                    initialFingerprint
             )
 
-        } catch (e: Exception) {
+        /*
+         * A real verification failure/unknown must not be
+         * silently converted into success.
+         */
+        return when (
+            verificationResult.status
+        ) {
 
-            ActionResult(
-                status =
-                    ActionStatus.FAILED,
-                action =
-                    request.action,
-                message =
-                    "Capability execution failed: " +
-                        (
-                            e.message
-                                ?: e.javaClass.simpleName
-                        ),
-                verified = false
-            )
+            ActionStatus.VERIFIED -> {
+
+                verificationResult.copy(
+                    data =
+                        executionResult.data +
+                            verificationResult.data
+                )
+            }
+
+            ActionStatus.UNKNOWN -> {
+
+                ActionResult(
+                    status =
+                        ActionStatus.UNKNOWN,
+                    action =
+                        request.action,
+                    message =
+                        verificationResult.message,
+                    verified = false,
+                    data =
+                        executionResult.data +
+                            verificationResult.data
+                )
+            }
+
+            else -> {
+
+                verificationResult
+            }
         }
     }
 
     /**
-     * Convenience helper for safe actions.
+     * Convenience helper using the normal confirmation policy.
      */
     fun executeSafe(
         action: String,
@@ -151,7 +264,7 @@ class CapabilityBus(
     }
 
     /**
-     * Expose the authoritative capability state.
+     * Expose authoritative capability state.
      */
     fun capabilityFor(
         action: String
@@ -165,5 +278,171 @@ class CapabilityBus(
         return capabilityManager.canExecute(
             request
         )
+    }
+
+    /**
+     * Capture the current visible screen.
+     *
+     * This intentionally duplicates no screen-node references.
+     * VerificationEngine owns the actual snapshot representation.
+     */
+    private fun captureFingerprint(): String? {
+
+        val service =
+            VoiceJarvisAccessibilityService.instance
+                ?: return null
+
+        return try {
+
+            val root =
+                service.rootInActiveWindow
+                    ?: return null
+
+            /*
+             * Build a lightweight deterministic snapshot locally.
+             *
+             * We do not retain root or child nodes.
+             */
+            try {
+
+                val elements =
+                    mutableListOf<String>()
+
+                collectFingerprintNodes(
+                    node = root,
+                    output = elements,
+                    depth = 0
+                )
+
+                buildString {
+
+                    append(
+                        root.packageName
+                            ?.toString()
+                            .orEmpty()
+                    )
+
+                    append('|')
+
+                    elements
+                        .take(80)
+                        .forEach {
+                            append(it)
+                            append(';')
+                        }
+
+                }.take(14_000)
+
+            } finally {
+
+                root.recycle()
+            }
+
+        } catch (
+            _: Exception
+        ) {
+
+            null
+        }
+    }
+
+    private fun collectFingerprintNodes(
+        node: android.view.accessibility.AccessibilityNodeInfo,
+        output: MutableList<String>,
+        depth: Int
+    ) {
+
+        if (
+            output.size >= 80 ||
+            depth > 28
+        ) {
+            return
+        }
+
+        val text =
+            node.text
+                ?.toString()
+                .orEmpty()
+
+        val description =
+            node.contentDescription
+                ?.toString()
+                .orEmpty()
+
+        val className =
+            node.className
+                ?.toString()
+                .orEmpty()
+
+        val bounds =
+            android.graphics.Rect()
+
+        node.getBoundsInScreen(
+            bounds
+        )
+
+        if (
+            text.isNotBlank() ||
+            description.isNotBlank() ||
+            bounds.width() > 0 ||
+            bounds.height() > 0
+        ) {
+
+            output.add(
+                buildString {
+
+                    append(text)
+                    append('|')
+
+                    append(description)
+                    append('|')
+
+                    append(className)
+                    append('|')
+
+                    append(bounds.left)
+                    append(',')
+
+                    append(bounds.top)
+                    append(',')
+
+                    append(bounds.right)
+                    append(',')
+
+                    append(bounds.bottom)
+
+                }
+            )
+        }
+
+        for (
+            index in 0 until node.childCount
+        ) {
+
+            if (
+                output.size >= 80
+            ) {
+                break
+            }
+
+            val child =
+                node.getChild(
+                    index
+                )
+                    ?: continue
+
+            try {
+
+                collectFingerprintNodes(
+                    node = child,
+                    output = output,
+                    depth = depth + 1
+                )
+
+            } finally {
+
+                child.recycle()
+            }
+        }
     }
 }

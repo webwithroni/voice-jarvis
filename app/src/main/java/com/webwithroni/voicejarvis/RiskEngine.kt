@@ -1,10 +1,15 @@
 package com.webwithroni.voicejarvis
 
 /**
- * Central deterministic action safety policy.
+ * Central action safety policy.
  *
- * The model can request an action.
- * The model cannot define the action's risk.
+ * The LLM may suggest an action, but it does not decide:
+ *
+ * - the action risk
+ * - whether confirmation is required
+ * - whether verification is required
+ *
+ * Those decisions remain deterministic here.
  */
 object RiskEngine {
 
@@ -13,9 +18,16 @@ object RiskEngine {
     ): ActionRisk {
 
         return when (
-            action.lowercase()
+            action.trim().lowercase()
         ) {
 
+            /*
+             * SAFE
+             *
+             * These actions do not directly create external
+             * communication, purchases, account changes, or
+             * other sensitive side effects.
+             */
             "read_screen",
             "scroll",
             "swipe",
@@ -28,12 +40,23 @@ object RiskEngine {
             "get_device_info" ->
                 ActionRisk.SAFE
 
+            /*
+             * LOW
+             *
+             * Normal navigation/control actions.
+             */
             "launch_app",
             "open_app",
             "media_control",
             "type" ->
                 ActionRisk.LOW
 
+            /*
+             * MEDIUM
+             *
+             * These can communicate externally or modify user
+             * state and therefore require explicit confirmation.
+             */
             "send_message",
             "send_sms",
             "call",
@@ -41,11 +64,22 @@ object RiskEngine {
             "change_settings" ->
                 ActionRisk.MEDIUM
 
+            /*
+             * HIGH
+             *
+             * Account/security-changing actions.
+             */
             "install_app",
             "account_change",
             "security_change" ->
                 ActionRisk.HIGH
 
+            /*
+             * CRITICAL
+             *
+             * Financial operations always require explicit
+             * user authorization.
+             */
             "payment",
             "prepare_payment",
             "financial_transfer",
@@ -53,18 +87,23 @@ object RiskEngine {
             "subscription" ->
                 ActionRisk.CRITICAL
 
+            /*
+             * Unknown actions fail closed into MEDIUM.
+             */
             else ->
                 ActionRisk.MEDIUM
         }
     }
 
+    /**
+     * Determine whether the user must explicitly confirm
+     * before execution.
+     */
     fun requiresConfirmation(
         risk: ActionRisk
     ): Boolean {
 
-        return when (
-            risk
-        ) {
+        return when (risk) {
 
             ActionRisk.SAFE ->
                 false
@@ -83,19 +122,47 @@ object RiskEngine {
         }
     }
 
+    /**
+     * Determine whether the action needs observable
+     * post-action verification.
+     *
+     * Important:
+     *
+     * EXECUTED != VERIFIED.
+     *
+     * Only actions with a meaningful verification strategy
+     * belong here.
+     */
     fun requiresVerification(
         action: String
     ): Boolean {
 
         return when (
-            action.lowercase()
+            action.trim().lowercase()
         ) {
 
+            /*
+             * Screen-state actions.
+             */
+            "open_app",
+            "launch_app",
             "scroll",
             "swipe",
             "tap",
             "tap_element",
             "type",
+            "back",
+            "home",
+            "recents" ->
+                true
+
+            /*
+             * These already have application-specific or
+             * future verification strategies.
+             *
+             * They remain enabled here so the capability
+             * pipeline does not silently treat them as verified.
+             */
             "send_message",
             "send_sms",
             "call",
