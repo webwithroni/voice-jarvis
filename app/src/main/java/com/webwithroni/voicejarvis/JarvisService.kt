@@ -77,6 +77,11 @@ class JarvisService : Service() {
     private var firebaseFirstResponseRecorded = false
     private var firebaseFirstResponseLatencyMs: Long? = null
     private var firebaseTurnInterrupted = false
+    private var firebaseResponseAccepted: Boolean? = null
+    private var firebaseUserCorrected = false
+    private var firebaseCorrectionType: String? = null
+    private var firebaseQualityScore: Int? = null
+    private var firebaseCurrentTurnId: String? = null
     private var firebaseConversationStarted = false
 
     /*
@@ -602,22 +607,31 @@ class JarvisService : Service() {
                     )
                 ) {
 
-                    FirebaseManager.recordCompletedTurn(
-                        userTranscript = userTranscript,
-                        assistantTranscript = assistantTranscript,
-                        durationMs = durationMs,
-                        firstResponseLatencyMs =
-                            firebaseFirstResponseLatencyMs,
-                        provider = "gemini-live",
-                        interrupted = firebaseTurnInterrupted,
-                        toolNames = tools
-                    )
+                    firebaseCurrentTurnId =
+                        FirebaseManager.recordCompletedTurn(
+                            userTranscript = userTranscript,
+                            assistantTranscript = assistantTranscript,
+                            durationMs = durationMs,
+                            firstResponseLatencyMs =
+                                firebaseFirstResponseLatencyMs,
+                            provider = "gemini-live",
+                            interrupted = firebaseTurnInterrupted,
+                            toolNames = tools,
+                            responseAccepted = firebaseResponseAccepted,
+                            userCorrected = firebaseUserCorrected,
+                            correctionType = firebaseCorrectionType,
+                            qualityScore = firebaseQualityScore
+                        )
                 }
 
                 firebaseTurnStartedAt = 0L
                 firebaseFirstResponseRecorded = false
                 firebaseFirstResponseLatencyMs = null
                 firebaseTurnInterrupted = false
+                firebaseResponseAccepted = null
+                firebaseUserCorrected = false
+                firebaseCorrectionType = null
+                firebaseQualityScore = null
 
                 synchronized(firebaseTurnTools) {
                     firebaseTurnTools.clear()
@@ -1112,6 +1126,71 @@ class JarvisService : Service() {
 
         listener?.onLog(
             message
+        )
+    }
+
+    /**
+     * Mark the latest response as accepted/rejected.
+     *
+     * These methods will later be called by the History /
+     * conversation feedback UI.
+     */
+    fun markLatestResponseAccepted(accepted: Boolean) {
+
+        firebaseResponseAccepted = accepted
+
+        FirebaseManager.updateTurnQuality(
+            turnId = firebaseCurrentTurnId,
+            responseAccepted = accepted
+        )
+    }
+
+    fun markLatestResponseCorrected(
+        correctionType: String
+    ) {
+
+        firebaseUserCorrected = true
+
+        firebaseCorrectionType =
+            correctionType
+                .trim()
+                .uppercase()
+                .takeIf {
+                    it.isNotBlank()
+                }
+
+        FirebaseManager.updateTurnQuality(
+            turnId = firebaseCurrentTurnId,
+            userCorrected = true,
+            correctionType = firebaseCorrectionType
+        )
+    }
+
+    fun setLatestQualityScore(
+        score: Int
+    ) {
+
+        firebaseQualityScore =
+            score.coerceIn(1, 5)
+
+        FirebaseManager.updateTurnQuality(
+            turnId = firebaseCurrentTurnId,
+            qualityScore = firebaseQualityScore
+        )
+    }
+
+    /**
+     * Record explicit feedback immediately.
+     *
+     * This is separate from the completed turn itself.
+     */
+    fun submitFeedback(
+        rating: Int,
+        comment: String? = null
+    ) {
+        FirebaseManager.recordFeedback(
+            rating = rating,
+            comment = comment
         )
     }
 

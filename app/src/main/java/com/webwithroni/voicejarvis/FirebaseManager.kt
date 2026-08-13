@@ -1,5 +1,6 @@
 package com.webwithroni.voicejarvis
 
+import android.content.Context
 import android.util.Log
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
@@ -37,13 +38,35 @@ object FirebaseManager {
     private var telemetryEnabled = true
 
     private var currentConversationId: String? = null
+    private var currentTurnId: String? = null
+
+    private var preferences: android.content.SharedPreferences? = null
+
+    private const val PREFS_NAME = "voice_jarvis_preferences"
+    private const val PREF_TELEMETRY_ENABLED = "telemetry_enabled"
 
     /**
      * Initialize Firebase and establish an anonymous identity.
      */
     fun initialize(
+        context: Context? = null,
         onComplete: ((Boolean) -> Unit)? = null
     ) {
+
+        context?.let {
+
+            preferences =
+                it.applicationContext.getSharedPreferences(
+                    PREFS_NAME,
+                    Context.MODE_PRIVATE
+                )
+
+            telemetryEnabled =
+                preferences?.getBoolean(
+                    PREF_TELEMETRY_ENABLED,
+                    true
+                ) ?: true
+        }
         if (initialized && auth.currentUser != null) {
             onComplete?.invoke(true)
             return
@@ -73,10 +96,21 @@ object FirebaseManager {
      * This can later be connected to Settings.
      */
     fun setTelemetryEnabled(enabled: Boolean) {
+
         telemetryEnabled = enabled
 
+        preferences
+            ?.edit()
+            ?.putBoolean(
+                PREF_TELEMETRY_ENABLED,
+                enabled
+            )
+            ?.apply()
+
         if (!enabled) {
+
             currentConversationId = null
+            currentTurnId = null
         }
     }
 
@@ -240,15 +274,20 @@ object FirebaseManager {
         firstResponseLatencyMs: Long?,
         provider: String = "gemini-live",
         interrupted: Boolean = false,
-        toolNames: List<String> = emptyList()
-    ) {
+        toolNames: List<String> = emptyList(),
+        responseAccepted: Boolean? = null,
+        userCorrected: Boolean = false,
+        correctionType: String? = null,
+        qualityScore: Int? = null
+    ): String? {
 
-        if (!canWrite()) return
+        if (!canWrite()) return null
 
-        val user = auth.currentUser ?: return
-        val conversationId = currentConversationId ?: return
+        val user = auth.currentUser ?: return null
+        val conversationId = currentConversationId ?: return null
 
         val turnId = UUID.randomUUID().toString()
+        currentTurnId = turnId
 
         val data = hashMapOf<String, Any>(
             "createdAt" to FieldValue.serverTimestamp(),
@@ -280,6 +319,22 @@ object FirebaseManager {
             data["tools"] = toolNames.distinct().take(20)
         }
 
+        responseAccepted?.let {
+            data["responseAccepted"] = it
+        }
+
+        data["userCorrected"] = userCorrected
+
+        correctionType
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                data["correctionType"] = it.take(64)
+            }
+
+        qualityScore?.let {
+            data["qualityScore"] = it.coerceIn(1, 5)
+        }
+
         db.collection("users")
             .document(user.uid)
             .collection("conversations")
@@ -289,6 +344,67 @@ object FirebaseManager {
             .set(data)
             .addOnFailureListener {
                 Log.e(TAG, "Failed to record completed turn", it)
+            }
+
+        return turnId
+    }
+
+    /**
+     * Update quality metadata for the latest completed turn.
+     *
+     * Used by History / conversation feedback UI.
+     */
+    fun updateTurnQuality(
+        turnId: String? = currentTurnId,
+        responseAccepted: Boolean? = null,
+        userCorrected: Boolean? = null,
+        correctionType: String? = null,
+        qualityScore: Int? = null
+    ) {
+
+        if (!canWrite()) return
+
+        val user = auth.currentUser ?: return
+        val conversationId = currentConversationId ?: return
+        val resolvedTurnId = turnId ?: return
+
+        val updates = hashMapOf<String, Any>()
+
+        responseAccepted?.let {
+            updates["responseAccepted"] = it
+        }
+
+        userCorrected?.let {
+            updates["userCorrected"] = it
+        }
+
+        correctionType
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                updates["correctionType"] = it
+            }
+
+        qualityScore?.let {
+            updates["qualityScore"] = it.coerceIn(1, 5)
+        }
+
+        if (updates.isEmpty()) return
+
+        updates["feedbackUpdatedAt"] =
+            FieldValue.serverTimestamp()
+
+        db.collection("users")
+            .document(user.uid)
+            .collection("conversations")
+            .document(conversationId)
+            .collection("turns")
+            .document(resolvedTurnId)
+            .set(
+                updates,
+                SetOptions.merge()
+            )
+            .addOnFailureListener {
+                Log.e(TAG, "Failed to update turn quality", it)
             }
     }
 
@@ -411,6 +527,10 @@ object FirebaseManager {
 
     fun getConversationId(): String? {
         return currentConversationId
+    }
+
+    fun getCurrentTurnId(): String? {
+        return currentTurnId
     }
 
     private fun canWrite(): Boolean {

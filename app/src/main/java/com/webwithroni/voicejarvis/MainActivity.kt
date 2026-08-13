@@ -21,6 +21,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -100,7 +102,25 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
          * Conversation sessions are created later,
          * when an actual voice interaction begins.
          */
-        FirebaseManager.initialize { success ->
+        /*
+         * Firebase App Check.
+         *
+         * This initialization is deliberately non-blocking.
+         * Voice startup must never wait for attestation.
+         */
+        try {
+            FirebaseAppCheck.getInstance()
+                .installAppCheckProviderFactory(
+                    PlayIntegrityAppCheckProviderFactory.getInstance()
+                )
+        } catch (e: Exception) {
+            android.util.Log.w(
+                "VoiceJarvis",
+                "App Check initialization unavailable: ${e.message}"
+            )
+        }
+
+        FirebaseManager.initialize(this) { success ->
             if (success) {
                 android.util.Log.d(
                     "VoiceJarvis",
