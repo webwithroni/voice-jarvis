@@ -200,7 +200,7 @@ class VoiceJarvisAccessibilityService :
          * Resolve a fresh node from the current screen.
          */
         val node =
-            resolveFreshNode(
+            resolveFreshServiceNode(
                 descriptor
             )
                 ?: return controller.tap(
@@ -246,7 +246,7 @@ class VoiceJarvisAccessibilityService :
                 ?: return false
 
         val node =
-            resolveFreshNode(
+            resolveFreshServiceNode(
                 descriptor
             )
                 ?: return false
@@ -402,7 +402,7 @@ class VoiceJarvisAccessibilityService :
          * Resolve a fresh node by semantic text.
          */
         val node =
-            resolveFreshNode(
+            resolveFreshControllerNode(
                 target
             )
 
@@ -480,7 +480,27 @@ class VoiceJarvisAccessibilityService :
         }
     }
 
-    private fun resolveFreshNode(
+    private fun resolveFreshServiceNode(
+        descriptor: ScreenElement
+    ): AccessibilityNodeInfo? {
+
+        val controllerDescriptor =
+            ScreenController.ScreenElement(
+                text = descriptor.text,
+                contentDescription =
+                    descriptor.contentDescription,
+                className = descriptor.className,
+                clickable = descriptor.clickable,
+                editable = descriptor.editable,
+                bounds = Rect(descriptor.bounds)
+            )
+
+        return resolveFreshControllerNode(
+            controllerDescriptor
+        )
+    }
+
+    private fun resolveFreshControllerNode(
         descriptor: ScreenController.ScreenElement
     ): AccessibilityNodeInfo? {
 
