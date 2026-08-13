@@ -153,20 +153,32 @@ class CapabilityBusToolBridge(
                         .trim()
                         .lowercase()
 
+                /*
+                 * scroll_screen is ALWAYS vertical.
+                 *
+                 * Horizontal gestures belong to the separate
+                 * swipe capability.
+                 *
+                 * Fail closed instead of silently converting a
+                 * horizontal request into a vertical scroll.
+                 */
+                if (
+                    direction != "up" &&
+                    direction != "down"
+                ) {
+
+                    return ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            "scroll",
+                        message =
+                            "scroll_screen accepts only 'up' or 'down'."
+                    )
+                }
+
                 val normalizedDirection =
-                    when (
-                        direction
-                    ) {
-
-                        "up",
-                        "down",
-                        "left",
-                        "right" ->
-                            direction
-
-                        else ->
-                            "down"
-                    }
+                    direction
 
                 bus.executeSafe(
                     action = "scroll",

@@ -156,12 +156,11 @@ class ActionExecutor(
                 "down" ->
                     ScreenController.Direction.DOWN
 
-                "left" ->
-                    ScreenController.Direction.LEFT
-
-                "right" ->
-                    ScreenController.Direction.RIGHT
-
+                /*
+                 * scroll is strictly vertical.
+                 *
+                 * Horizontal movement belongs to swipe().
+                 */
                 else ->
                     ScreenController.Direction.DOWN
             }

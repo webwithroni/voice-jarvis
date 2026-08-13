@@ -114,8 +114,19 @@ object ToolDeclarations {
                 .put("text", strProp("Text to type")),
                 listOf("id", "text"))))
 
-        put(fn("scroll_screen", "Scroll the current screen up or down.",
-            schema(JSONObject().put("direction", strProp("'up' or 'down'")), listOf("direction"))))
+        put(
+            fn(
+                "scroll_screen",
+                "Scroll vertically through the current screen. Use ONLY 'up' or 'down'. Never use left or right for this tool.",
+                schema(
+                    JSONObject().put(
+                        "direction",
+                        strProp("Vertical scroll direction. MUST be exactly 'up' or 'down'.")
+                    ),
+                    listOf("direction")
+                )
+            )
+        )
 
         put(fn("go_back", "Press the Android back button.", schema(JSONObject(), listOf())))
         put(fn("go_home", "Go to the Android home screen.", schema(JSONObject(), listOf())))
