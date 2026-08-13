@@ -940,9 +940,74 @@ class ActionExecutor(
                         "Text is required."
                 )
 
+        /*
+         * Gemini's type_text tool provides a numeric element id
+         * from the most recent read_screen call.
+         *
+         * Prefer that authoritative descriptor path.
+         */
+        val id =
+            request.parameters["id"]
+                ?.toIntOrNull()
+
+        if (
+            id != null
+        ) {
+
+            if (
+                id < 0
+            ) {
+
+                return ActionResult(
+                    status =
+                        ActionStatus.FAILED,
+                    action =
+                        request.action,
+                    message =
+                        "A valid screen element id is required."
+                )
+            }
+
+            val success =
+                service.typeText(
+                    id,
+                    text
+                )
+
+            return ActionResult(
+                status =
+                    if (success) {
+                        ActionStatus.EXECUTED
+                    } else {
+                        ActionStatus.FAILED
+                    },
+                action =
+                    request.action,
+                message =
+                    if (success) {
+                        "Text entered into screen element $id."
+                    } else {
+                        "Could not type into screen element $id."
+                    },
+                verified =
+                    false
+            )
+        }
+
+        /*
+         * Preserve the existing field-based path for internal
+         * callers that do not use a numeric element id.
+         */
         val field =
             request.parameters["field"]
-                ?: text
+                ?: return ActionResult(
+                    status =
+                        ActionStatus.FAILED,
+                    action =
+                        request.action,
+                    message =
+                        "Input element id or field is required."
+                )
 
         val node =
             service.findTextNode(
