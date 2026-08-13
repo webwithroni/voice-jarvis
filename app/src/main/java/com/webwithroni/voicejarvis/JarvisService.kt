@@ -880,12 +880,11 @@ class JarvisService : Service() {
                                 cleaned
                             )
 
-                            return@onInputTranscript
-                        }
+                        } else {
 
-                        if (
-                            !firebaseConversationStarted
-                        ) {
+                            if (
+                                !firebaseConversationStarted
+                            ) {
 
                             val conversationId =
                                 FirebaseManager
@@ -927,12 +926,13 @@ class JarvisService : Service() {
                         lastUserText =
                             latestUserTranscript
 
-                        handler.post {
+                            handler.post {
 
-                            pushConversation(
-                                latestUserTranscript,
-                                null
-                            )
+                                pushConversation(
+                                    latestUserTranscript,
+                                    null
+                                )
+                            }
                         }
                     }
                 },
@@ -2642,8 +2642,7 @@ class JarvisService : Service() {
     ) {
 
         logBuffer
-            .append("
-")
+            .append("\n")
             .append(message)
 
         listener?.onLog(
