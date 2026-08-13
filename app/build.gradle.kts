@@ -62,15 +62,22 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    compilerOptions {
-        jvmTarget.set(
-            org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-        )
-    }
 
     buildFeatures {
         viewBinding = true
         buildConfig = true
+    }
+}
+
+/*
+ * Kotlin 2.3 compiler configuration.
+ *
+ * Keep this outside the Android android {} block.
+ */
+kotlin {
+    compilerOptions {
+        jvmTarget =
+            org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
