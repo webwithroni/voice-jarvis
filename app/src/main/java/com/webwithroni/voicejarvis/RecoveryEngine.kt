@@ -24,6 +24,12 @@ package com.webwithroni.voicejarvis
  * 3. Only explicitly allowed actions may retry.
  * 4. Side-effect uncertainty never becomes automatic retry.
  * 5. UNKNOWN remains UNKNOWN when proof is unavailable.
+ *
+ * Observability:
+ *
+ * RecoveryObservability records only coarse operational
+ * metadata. It never receives transcripts, screen text,
+ * coordinates, action parameters, or private UI content.
  */
 class RecoveryEngine(
     private val executor: ActionExecutor
@@ -43,6 +49,10 @@ class RecoveryEngine(
         ) -> ActionResult,
         captureFingerprint: () -> String?
     ): ActionResult {
+
+        RecoveryObservability.actionStarted(
+            request
+        )
 
         var currentRequest =
             request
@@ -69,8 +79,11 @@ class RecoveryEngine(
                         currentRequest.action
                     )
                 ) {
+
                     captureFingerprint()
+
                 } else {
+
                     null
                 }
 
@@ -134,6 +147,11 @@ class RecoveryEngine(
                     RecoveryFailure.USER_CONFIRMATION_REQUIRED
             ) {
 
+                RecoveryObservability.actionFailed(
+                    currentRequest,
+                    failure
+                )
+
                 return withRecoveryMetadata(
                     executionResult,
                     attempt,
@@ -171,12 +189,28 @@ class RecoveryEngine(
                         recoveredRequest != null
                     ) {
 
+                        RecoveryObservability.actionFailed(
+                            currentRequest,
+                            failure
+                        )
+
+                        RecoveryObservability.actionRecovered(
+                            currentRequest,
+                            attempt + 1,
+                            recoveredRequest.action
+                        )
+
                         currentRequest =
                             recoveredRequest
 
                         continue
                     }
                 }
+
+                RecoveryObservability.actionFailed(
+                    currentRequest,
+                    failure
+                )
 
                 return finalFailure(
                     request =
@@ -202,6 +236,12 @@ class RecoveryEngine(
                 executionResult.verified
             ) {
 
+                RecoveryObservability.actionVerified(
+                    currentRequest,
+                    attempt,
+                    "executor_verified"
+                )
+
                 return withRecoveryMetadata(
                     executionResult,
                     attempt,
@@ -210,8 +250,8 @@ class RecoveryEngine(
             }
 
             /*
-             * No verification policy means execution result is the
-             * highest level of evidence currently available.
+             * No verification policy means the execution result
+             * is the highest level of evidence currently available.
              */
             if (
                 !RiskEngine.requiresVerification(
@@ -219,6 +259,9 @@ class RecoveryEngine(
                 )
             ) {
 
+                /*
+                 * Do not label plain EXECUTED as VERIFIED.
+                 */
                 return withRecoveryMetadata(
                     executionResult,
                     attempt,
@@ -267,6 +310,23 @@ class RecoveryEngine(
                     ActionStatus.VERIFIED &&
                 verificationResult.verified
             ) {
+
+                RecoveryObservability.actionVerified(
+                    currentRequest,
+                    attempt,
+                    "verification_engine"
+                )
+
+                if (
+                    attempt > 1
+                ) {
+
+                    RecoveryObservability.actionRecovered(
+                        currentRequest,
+                        attempt,
+                        "verified_after_recovery"
+                    )
+                }
 
                 return ActionResult(
                     status =
@@ -323,6 +383,11 @@ class RecoveryEngine(
                     RecoveryFailure.USER_CONFIRMATION_REQUIRED
             ) {
 
+                RecoveryObservability.actionFailed(
+                    currentRequest,
+                    failure
+                )
+
                 return withMergedMetadata(
                     executionResult,
                     verificationResult,
@@ -338,6 +403,11 @@ class RecoveryEngine(
                 failure ==
                     RecoveryFailure.SIDE_EFFECT_UNCERTAIN
             ) {
+
+                RecoveryObservability.actionFailed(
+                    currentRequest,
+                    failure
+                )
 
                 return withMergedMetadata(
                     executionResult,
@@ -367,6 +437,17 @@ class RecoveryEngine(
                     recoveredRequest != null
                 ) {
 
+                    RecoveryObservability.actionFailed(
+                        currentRequest,
+                        failure
+                    )
+
+                    RecoveryObservability.actionRecovered(
+                        currentRequest,
+                        attempt + 1,
+                        recoveredRequest.action
+                    )
+
                     currentRequest =
                         recoveredRequest
 
@@ -377,6 +458,11 @@ class RecoveryEngine(
             /*
              * No safe recovery path remains.
              */
+            RecoveryObservability.actionFailed(
+                currentRequest,
+                failure
+            )
+
             return finalFailure(
                 request =
                     currentRequest,
@@ -390,6 +476,11 @@ class RecoveryEngine(
                     attempt
             )
         }
+
+        RecoveryObservability.actionFailed(
+            currentRequest,
+            lastFailure
+        )
 
         return finalFailure(
             request =
@@ -420,8 +511,10 @@ class RecoveryEngine(
                     mapOf(
                         "recoveryAttempts" to
                             attempts.toString(),
+
                         "recoveryFailure" to
                             failure.name,
+
                         "automaticRetry" to
                             (
                                 if (
@@ -449,23 +542,30 @@ class RecoveryEngine(
         return ActionResult(
             status =
                 verificationResult.status,
+
             action =
                 verificationResult.action,
+
             message =
                 verificationResult.message,
+
             verified =
                 verificationResult.verified,
+
             requiresConfirmation =
                 verificationResult
                     .requiresConfirmation,
+
             data =
                 executionResult.data +
                     verificationResult.data +
                     mapOf(
                         "recoveryAttempts" to
                             attempts.toString(),
+
                         "recoveryFailure" to
                             failure.name,
+
                         "automaticRetry" to
                             "false"
                     )
@@ -504,28 +604,40 @@ class RecoveryEngine(
                 if (
                     verificationResult != null
                 ) {
+
                     ActionStatus.UNKNOWN
+
                 } else {
+
                     executionResult
                         ?.status
                         ?: ActionStatus.UNKNOWN
                 },
+
             action =
                 request.action,
+
             message =
                 "Recovery stopped after $attempts attempt(s). " +
                     "$executionMessage " +
                     "$verificationMessage",
-            verified = false,
-            requiresConfirmation = false,
+
+            verified =
+                false,
+
+            requiresConfirmation =
+                false,
+
             data =
                 (executionResult?.data ?: emptyMap()) +
                     (verificationResult?.data ?: emptyMap()) +
                     mapOf(
                         "recoveryAttempts" to
                             attempts.toString(),
+
                         "recoveryFailure" to
                             failure.name,
+
                         "automaticRetry" to
                             (
                                 if (
