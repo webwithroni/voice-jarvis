@@ -85,6 +85,16 @@ class JarvisService : Service() {
     private var firebaseConversationStarted = false
 
     /*
+     * Firebase Performance trace handles.
+     *
+     * These explicitly bind completion events to the trace
+     * instance that started the work, preventing stale
+     * reconnect callbacks from closing a newer trace.
+     */
+    private var geminiPerformanceTraceId: String? = null
+    private var voicePerformanceTraceId: String? = null
+
+    /*
      * Tools used during the current conversational turn.
      *
      * Kept locally and flushed to Firebase only when the turn ends.
@@ -311,6 +321,13 @@ class JarvisService : Service() {
             return
         }
 
+        val connectionPerformanceTraceId =
+            FirebasePerformanceManager
+                .startGeminiConnection()
+
+        geminiPerformanceTraceId =
+            connectionPerformanceTraceId
+
         geminiClient = GeminiLiveClient(
 
             apiKey = apiKey,
@@ -325,6 +342,20 @@ class JarvisService : Service() {
                     log(
                         "Gemini Live connected."
                     )
+
+                    FirebasePerformanceManager
+                        .finishGeminiConnection(
+                            handleId =
+                                connectionPerformanceTraceId,
+                            success = true
+                        )
+
+                    if (
+                        geminiPerformanceTraceId ==
+                            connectionPerformanceTraceId
+                    ) {
+                        geminiPerformanceTraceId = null
+                    }
 
                     consecutiveFailures = 0
 
@@ -370,6 +401,16 @@ class JarvisService : Service() {
 
                     firebaseFirstResponseLatencyMs =
                         latencyMs
+
+                    FirebasePerformanceManager
+                        .setVoiceTurnMetric(
+                            handleId =
+                                voicePerformanceTraceId,
+                            name =
+                                "first_audio_ms",
+                            value =
+                                latencyMs
+                        )
 
                     firebaseFirstResponseRecorded = true
 
@@ -431,6 +472,10 @@ class JarvisService : Service() {
 
                         firebaseTurnStartedAt =
                             android.os.SystemClock.elapsedRealtime()
+
+                        voicePerformanceTraceId =
+                            FirebasePerformanceManager
+                                .startVoiceTurn()
 
                         FirebaseAnalyticsManager
                             .voiceTurnStarted()
@@ -567,6 +612,10 @@ class JarvisService : Service() {
                 val toolStartedAt =
                     android.os.SystemClock.elapsedRealtime()
 
+                val performanceTraceId =
+                    FirebasePerformanceManager
+                        .startTool(name)
+
                 val result =
                     try {
                         toolExecutor.execute(
@@ -577,6 +626,12 @@ class JarvisService : Service() {
 
                         FirebaseAnalyticsManager
                             .toolFailed(name)
+
+                        FirebasePerformanceManager
+                            .finishTool(
+                                performanceTraceId,
+                                success = false
+                            )
 
                         throw e
                     }
@@ -604,6 +659,12 @@ class JarvisService : Service() {
                     FirebaseAnalyticsManager
                         .toolFailed(name)
                 }
+
+                FirebasePerformanceManager
+                    .finishTool(
+                        performanceTraceId,
+                        success = toolSucceeded
+                    )
 
                 geminiClient?.sendToolResponse(
                     id,
@@ -684,7 +745,38 @@ class JarvisService : Service() {
                             provider = "gemini-live",
                             interrupted = firebaseTurnInterrupted
                         )
+
+                    FirebasePerformanceManager
+                        .setVoiceTurnMetric(
+                            handleId =
+                                voicePerformanceTraceId,
+                            name =
+                                "duration_ms",
+                            value =
+                                durationMs
+                                    ?: 0L
+                        )
+
+                    FirebasePerformanceManager
+                        .setVoiceTurnAttribute(
+                            handleId =
+                                voicePerformanceTraceId,
+                            name =
+                                "interrupted",
+                            value =
+                                firebaseTurnInterrupted
+                                    .toString()
+                        )
+
                 }
+
+                FirebasePerformanceManager
+                    .finishVoiceTurn(
+                        handleId =
+                            voicePerformanceTraceId
+                    )
+
+                voicePerformanceTraceId = null
 
                 firebaseTurnStartedAt = 0L
                 firebaseFirstResponseRecorded = false
@@ -731,6 +823,20 @@ class JarvisService : Service() {
             },
 
             onDisconnected = {
+
+                FirebasePerformanceManager
+                    .finishGeminiConnection(
+                        handleId =
+                            connectionPerformanceTraceId,
+                        success = false
+                    )
+
+                if (
+                    geminiPerformanceTraceId ==
+                        connectionPerformanceTraceId
+                ) {
+                    geminiPerformanceTraceId = null
+                }
 
                 handler.post {
 
@@ -1437,6 +1543,11 @@ class JarvisService : Service() {
         handler.removeCallbacksAndMessages(
             null
         )
+
+        FirebasePerformanceManager.close()
+
+        geminiPerformanceTraceId = null
+        voicePerformanceTraceId = null
 
         geminiClient?.disconnect()
 

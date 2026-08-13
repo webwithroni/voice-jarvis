@@ -126,6 +126,8 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
             this
         )
 
+        FirebasePerformanceManager.initialize()
+
         FirebaseManager.initialize(this) { success ->
             if (success) {
                 android.util.Log.d(

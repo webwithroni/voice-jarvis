@@ -103,6 +103,10 @@ object FirebaseManager {
             enabled
         )
 
+        FirebasePerformanceManager.setEnabled(
+            enabled
+        )
+
         preferences
             ?.edit()
             ?.putBoolean(
