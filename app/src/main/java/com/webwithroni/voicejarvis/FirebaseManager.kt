@@ -99,6 +99,10 @@ object FirebaseManager {
 
         telemetryEnabled = enabled
 
+        FirebaseAnalyticsManager.setEnabled(
+            enabled
+        )
+
         preferences
             ?.edit()
             ?.putBoolean(

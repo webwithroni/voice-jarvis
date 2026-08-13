@@ -431,6 +431,9 @@ class JarvisService : Service() {
 
                         firebaseTurnStartedAt =
                             android.os.SystemClock.elapsedRealtime()
+
+                        FirebaseAnalyticsManager
+                            .voiceTurnStarted()
                     }
 
                     latestUserTranscript =
@@ -558,11 +561,49 @@ class JarvisService : Service() {
                     }
                 }
 
+                FirebaseAnalyticsManager
+                    .toolStarted(name)
+
+                val toolStartedAt =
+                    android.os.SystemClock.elapsedRealtime()
+
                 val result =
-                    toolExecutor.execute(
-                        name,
-                        args
+                    try {
+                        toolExecutor.execute(
+                            name,
+                            args
+                        )
+                    } catch (e: Exception) {
+
+                        FirebaseAnalyticsManager
+                            .toolFailed(name)
+
+                        throw e
+                    }
+
+                val toolDurationMs =
+                    android.os.SystemClock.elapsedRealtime() -
+                        toolStartedAt
+
+                val toolSucceeded =
+                    result.optBoolean(
+                        "success",
+                        true
                     )
+
+                if (toolSucceeded) {
+
+                    FirebaseAnalyticsManager
+                        .toolCompleted(
+                            tool = name,
+                            durationMs = toolDurationMs
+                        )
+
+                } else {
+
+                    FirebaseAnalyticsManager
+                        .toolFailed(name)
+                }
 
                 geminiClient?.sendToolResponse(
                     id,
@@ -633,6 +674,15 @@ class JarvisService : Service() {
                             userCorrected = firebaseUserCorrected,
                             correctionType = firebaseCorrectionType,
                             qualityScore = firebaseQualityScore
+                        )
+
+                    FirebaseAnalyticsManager
+                        .voiceTurnCompleted(
+                            durationMs = durationMs,
+                            firstResponseLatencyMs =
+                                firebaseFirstResponseLatencyMs,
+                            provider = "gemini-live",
+                            interrupted = firebaseTurnInterrupted
                         )
                 }
 

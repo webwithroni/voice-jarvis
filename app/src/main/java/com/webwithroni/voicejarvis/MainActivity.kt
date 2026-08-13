@@ -122,6 +122,10 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
         FirebaseCrashlyticsManager.initialize()
 
+        FirebaseAnalyticsManager.initialize(
+            this
+        )
+
         FirebaseManager.initialize(this) { success ->
             if (success) {
                 android.util.Log.d(
