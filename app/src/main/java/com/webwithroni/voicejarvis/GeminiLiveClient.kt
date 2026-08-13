@@ -2,6 +2,7 @@ package com.webwithroni.voicejarvis
 
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Base64
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -13,12 +14,43 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+/**
+ * Gemini Live V2 client.
+ *
+ * Pipeline:
+ *
+ * Microphone PCM
+ *      ↓
+ * realtimeInput.audio
+ *      ↓
+ * Gemini Live
+ *      ↓
+ * serverContent
+ *      ├── model audio
+ *      ├── input transcript
+ *      ├── output transcript
+ *      ├── interrupted
+ *      ├── turnComplete
+ *      └── generationComplete
+ *
+ * Connection reliability:
+ *
+ * - Session resumption
+ * - Context window compression
+ * - GoAway handling
+ * - Generation-safe callbacks
+ * - OkHttp WebSocket ping
+ *
+ * Gemini 3.1 Flash Live:
+ *
+ * models/gemini-3.1-flash-live-preview
+ */
 class GeminiLiveClient(
     private val apiKey: String,
     private val systemPrompt: String,
     private val voiceName: String = "Aoede",
     private val model: String =
-        "models/gemini-2.5-flash-native-audio-preview-12-2025",
+        "models/gemini-3.1-flash-live-preview",
 
     private val onSetupComplete: () -> Unit,
     private val onAudioChunk: (ByteArray) -> Unit,
@@ -28,12 +60,21 @@ class GeminiLiveClient(
 
     private val onTurnComplete: () -> Unit,
 
-    /*
-     * Gemini Live server-side interruption event.
+    /**
+     * Gemini server-side interruption.
      *
-     * This is critical for real-time barge-in.
+     * This is the primary barge-in signal.
      */
     private val onInterrupted: () -> Unit,
+
+    /**
+     * Gemini generation finished.
+     *
+     * This is separate from turnComplete because
+     * generation completion is useful for controlling
+     * the playback/listening state.
+     */
+    private val onGenerationComplete: () -> Unit,
 
     private val onToolCall:
         (id: String, name: String, args: JSONObject) -> Unit,
@@ -44,11 +85,11 @@ class GeminiLiveClient(
 
     private var webSocket: WebSocket? = null
 
-    /*
+    /**
      * WebSocket transport health.
      *
-     * OkHttp ping frames are transport-level keepalive traffic.
-     * They are NOT fake microphone/audio input.
+     * OkHttp ping frames are transport-level keepalive
+     * traffic. They are NOT microphone/audio input.
      */
     private val client =
         OkHttpClient.Builder()
@@ -71,7 +112,9 @@ class GeminiLiveClient(
             .build()
 
     private val handler =
-        Handler(Looper.getMainLooper())
+        Handler(
+            Looper.getMainLooper()
+        )
 
     private var reconnectRunnable: Runnable? = null
 
@@ -84,19 +127,15 @@ class GeminiLiveClient(
     @Volatile
     private var reconnectScheduled = false
 
-    /*
-     * Gemini Live session resumption handle.
-     *
-     * The server periodically sends a new resumable handle.
-     * We reuse the latest valid handle when the WebSocket must
-     * be recreated.
+    /**
+     * Latest resumable Gemini session handle.
      */
     @Volatile
     private var sessionResumptionHandle: String? = null
 
-    /*
-     * Protect against callbacks from an older WebSocket changing
-     * state after a newer connection has already been established.
+    /**
+     * Prevent callbacks from an obsolete WebSocket
+     * from modifying the current connection.
      */
     @Volatile
     private var connectionGeneration: Long = 0L
@@ -120,12 +159,9 @@ class GeminiLiveClient(
         cancelReconnect()
 
         /*
-         * Invalidate the previous WebSocket before creating a
-         * replacement connection.
+         * Replace any previous socket.
          *
-         * This is especially important after Gemini GoAway:
-         * we never want two live sockets competing for the same
-         * assistant session.
+         * Only one active WebSocket is allowed.
          */
         val previousSocket =
             webSocket
@@ -139,12 +175,16 @@ class GeminiLiveClient(
 
         val generation =
             synchronized(this) {
+
                 connectionGeneration += 1L
+
                 connectionGeneration
             }
 
         setupCompleted = false
-        transportState = "CONNECTING"
+
+        transportState =
+            "CONNECTING"
 
         val url =
             "wss://generativelanguage.googleapis.com/ws/" +
@@ -204,7 +244,7 @@ class GeminiLiveClient(
                         }
 
                         lastInboundMessageAt =
-                            android.os.SystemClock
+                            SystemClock
                                 .elapsedRealtime()
 
                         handleMessage(
@@ -224,7 +264,7 @@ class GeminiLiveClient(
                         }
 
                         lastInboundMessageAt =
-                            android.os.SystemClock
+                            SystemClock
                                 .elapsedRealtime()
 
                         handleMessage(
@@ -244,8 +284,11 @@ class GeminiLiveClient(
                             return
                         }
 
-                        setupCompleted = false
-                        transportState = "DISCONNECTED"
+                        setupCompleted =
+                            false
+
+                        transportState =
+                            "DISCONNECTED"
 
                         onError(
                             "WebSocket error: " +
@@ -269,10 +312,15 @@ class GeminiLiveClient(
                             return
                         }
 
-                        setupCompleted = false
-                        transportState = "DISCONNECTED"
+                        setupCompleted =
+                            false
 
-                        if (!manuallyClosed) {
+                        transportState =
+                            "DISCONNECTED"
+
+                        if (
+                            !manuallyClosed
+                        ) {
 
                             onError(
                                 "WebSocket closed: " +
@@ -303,9 +351,13 @@ class GeminiLiveClient(
                 }
             )
 
-        webSocket = socket
+        webSocket =
+            socket
     }
 
+    /**
+     * Send the Gemini Live session configuration.
+     */
     private fun sendSetup() {
 
         val setup =
@@ -337,12 +389,10 @@ class GeminiLiveClient(
                         )
 
                         /*
-                         * Gemini Live connection/session reliability.
+                         * Session resumption.
                          *
-                         * Google recommends session resumption because
-                         * the WebSocket connection is periodically reset.
-                         * Context compression prevents long-lived audio
-                         * sessions from exhausting the context window.
+                         * If Gemini previously supplied a valid
+                         * handle, use it for the replacement socket.
                          */
                         put(
                             "sessionResumption",
@@ -353,6 +403,7 @@ class GeminiLiveClient(
                                         it.isNotBlank()
                                     }
                                     ?.let {
+
                                         put(
                                             "handle",
                                             it
@@ -361,6 +412,9 @@ class GeminiLiveClient(
                             }
                         )
 
+                        /*
+                         * Long-running voice sessions.
+                         */
                         put(
                             "contextWindowCompression",
                             JSONObject().apply {
@@ -372,6 +426,9 @@ class GeminiLiveClient(
                             }
                         )
 
+                        /*
+                         * Audio generation configuration.
+                         */
                         put(
                             "generationConfig",
                             JSONObject().apply {
@@ -404,26 +461,25 @@ class GeminiLiveClient(
                                 )
 
                                 /*
-                                 * Lower temperature makes
-                                 * short voice responses more
-                                 * predictable.
+                                 * Gemini 3.1 uses thinkingLevel.
+                                 *
+                                 * Minimal keeps latency low.
                                  */
                                 put(
-                                    "temperature",
-                                    0.7
+                                    "thinkingConfig",
+                                    JSONObject().put(
+                                        "thinkingLevel",
+                                        "minimal"
+                                    )
                                 )
                             }
                         )
 
                         /*
-                         * Keep transcription enabled and use
-                         * server-side VAD tuned for natural Hindi,
-                         * Hinglish and English speech.
+                         * Server-side automatic activity detection.
                          *
-                         * 700ms is a deliberate latency/continuity
-                         * compromise: long enough for natural pauses,
-                         * much safer than the previous aggressive
-                         * local 450ms boundary.
+                         * Audio input is streamed continuously in
+                         * small chunks. Gemini decides turn boundaries.
                          */
                         put(
                             "realtimeInputConfig",
@@ -472,6 +528,9 @@ class GeminiLiveClient(
                             }
                         )
 
+                        /*
+                         * Server-side transcription.
+                         */
                         put(
                             "outputAudioTranscription",
                             JSONObject()
@@ -482,6 +541,9 @@ class GeminiLiveClient(
                             JSONObject()
                         )
 
+                        /*
+                         * Gemini function calling.
+                         */
                         put(
                             "tools",
                             JSONArray().put(
@@ -508,6 +570,16 @@ class GeminiLiveClient(
         }
     }
 
+    /**
+     * Parse every Gemini Live server event.
+     *
+     * IMPORTANT:
+     *
+     * Gemini 3.1 may place multiple content parts
+     * inside the same serverContent event.
+     *
+     * Therefore we process every field independently.
+     */
     private fun handleMessage(
         text: String
     ) {
@@ -518,7 +590,9 @@ class GeminiLiveClient(
                 JSONObject(text)
 
             /*
-             * Setup complete.
+             * ==================================================
+             * SETUP COMPLETE
+             * ==================================================
              */
             if (
                 json.has(
@@ -526,25 +600,26 @@ class GeminiLiveClient(
                 )
             ) {
 
-                setupCompleted = true
-                transportState = "READY"
+                setupCompleted =
+                    true
+
+                transportState =
+                    "READY"
 
                 lastSetupAt =
-                    android.os.SystemClock
+                    SystemClock
                         .elapsedRealtime()
 
                 lastInboundMessageAt =
                     lastSetupAt
 
                 onSetupComplete()
-
-                return
             }
 
             /*
-             * Session resumption update.
-             *
-             * Keep the newest resumable handle.
+             * ==================================================
+             * SESSION RESUMPTION
+             * ==================================================
              */
             json.optJSONObject(
                 "sessionResumptionUpdate"
@@ -572,8 +647,12 @@ class GeminiLiveClient(
             }
 
             /*
-             * Gemini announces an upcoming WebSocket reset
-             * with GoAway. Do not wait for a hard failure.
+             * ==================================================
+             * GO AWAY
+             * ==================================================
+             *
+             * Gemini tells us before the current WebSocket
+             * is terminated.
              */
             json.optJSONObject(
                 "goAway"
@@ -591,9 +670,15 @@ class GeminiLiveClient(
                 scheduleReconnect(
                     delayMs =
                         when {
+
                             timeLeft > 5000L ->
-                                (timeLeft - 2000L)
-                                    .coerceAtMost(5000L)
+                                (
+                                    timeLeft -
+                                        2000L
+                                    )
+                                    .coerceAtMost(
+                                        5000L
+                                    )
 
                             timeLeft > 0L ->
                                 timeLeft
@@ -605,7 +690,9 @@ class GeminiLiveClient(
             }
 
             /*
-             * Tool calls.
+             * ==================================================
+             * TOOL CALL
+             * ==================================================
              */
             json.optJSONObject(
                 "toolCall"
@@ -616,14 +703,18 @@ class GeminiLiveClient(
                         "functionCalls"
                     )
 
-                if (calls != null) {
+                if (
+                    calls != null
+                ) {
 
                     for (
                         i in 0 until calls.length()
                     ) {
 
                         val call =
-                            calls.getJSONObject(i)
+                            calls.getJSONObject(
+                                i
+                            )
 
                         val id =
                             call.optString(
@@ -638,7 +729,8 @@ class GeminiLiveClient(
                         val args =
                             call.optJSONObject(
                                 "args"
-                            ) ?: JSONObject()
+                            )
+                                ?: JSONObject()
 
                         onToolCall(
                             id,
@@ -648,26 +740,33 @@ class GeminiLiveClient(
                     }
                 }
 
-                return
+                /*
+                 * Do NOT return here.
+                 *
+                 * A future server event may contain both
+                 * tool-related data and other fields.
+                 */
             }
-
-            val serverContent =
-                json.optJSONObject(
-                    "serverContent"
-                ) ?: return
 
             /*
              * ==================================================
-             * CRITICAL: GEMINI SERVER INTERRUPTION
+             * SERVER CONTENT
+             * ==================================================
+             */
+            val serverContent =
+                json.optJSONObject(
+                    "serverContent"
+                )
+                    ?: return
+
+            /*
+             * ==================================================
+             * INTERRUPTION
              * ==================================================
              *
-             * When the user starts talking while Jarvis is
-             * speaking, Gemini can report:
+             * This must happen immediately.
              *
-             * serverContent.interrupted = true
-             *
-             * We immediately notify JarvisService so it can
-             * clear AudioTrack/playback.
+             * JarvisService will clear the playback queue.
              */
             if (
                 serverContent.optBoolean(
@@ -677,16 +776,17 @@ class GeminiLiveClient(
             ) {
 
                 onInterrupted()
-
-                /*
-                 * Do not process stale model audio from
-                 * this server message.
-                 */
-                return
             }
 
             /*
-             * Model audio.
+             * ==================================================
+             * MODEL CONTENT
+             * ==================================================
+             *
+             * Process ALL parts in the event.
+             *
+             * Gemini 3.1 can send multiple content parts
+             * together.
              */
             val modelTurn =
                 serverContent.optJSONObject(
@@ -704,17 +804,23 @@ class GeminiLiveClient(
                     ) {
 
                         val part =
-                            parts.getJSONObject(i)
+                            parts.getJSONObject(
+                                i
+                            )
 
+                        /*
+                         * Audio can appear as inlineData.
+                         */
                         val inlineData =
                             part.optJSONObject(
                                 "inlineData"
                             )
 
                         val data =
-                            inlineData?.optString(
-                                "data"
-                            )
+                            inlineData
+                                ?.optString(
+                                    "data"
+                                )
 
                         if (
                             !data.isNullOrEmpty()
@@ -737,7 +843,9 @@ class GeminiLiveClient(
                                     )
                                 }
 
-                            } catch (e: Exception) {
+                            } catch (
+                                e: Exception
+                            ) {
 
                                 onError(
                                     "Audio decode error: " +
@@ -749,7 +857,9 @@ class GeminiLiveClient(
                 }
 
             /*
-             * Input transcription.
+             * ==================================================
+             * INPUT TRANSCRIPTION
+             * ==================================================
              */
             serverContent
                 .optJSONObject(
@@ -762,11 +872,16 @@ class GeminiLiveClient(
                     it.isNotBlank()
                 }
                 ?.let {
-                    onInputTranscript(it)
+
+                    onInputTranscript(
+                        it
+                    )
                 }
 
             /*
-             * Output transcription.
+             * ==================================================
+             * OUTPUT TRANSCRIPTION
+             * ==================================================
              */
             serverContent
                 .optJSONObject(
@@ -779,11 +894,16 @@ class GeminiLiveClient(
                     it.isNotBlank()
                 }
                 ?.let {
-                    onOutputTranscript(it)
+
+                    onOutputTranscript(
+                        it
+                    )
                 }
 
             /*
-             * Gemini finished the conversational turn.
+             * ==================================================
+             * TURN COMPLETE
+             * ==================================================
              */
             if (
                 serverContent.optBoolean(
@@ -795,7 +915,26 @@ class GeminiLiveClient(
                 onTurnComplete()
             }
 
-        } catch (e: Exception) {
+            /*
+             * ==================================================
+             * GENERATION COMPLETE
+             * ==================================================
+             *
+             * Treat this independently from turnComplete.
+             */
+            if (
+                serverContent.optBoolean(
+                    "generationComplete",
+                    false
+                )
+            ) {
+
+                onGenerationComplete()
+            }
+
+        } catch (
+            e: Exception
+        ) {
 
             onError(
                 "Parse error: ${e.message}"
@@ -803,6 +942,17 @@ class GeminiLiveClient(
         }
     }
 
+    /**
+     * Send one PCM audio chunk.
+     *
+     * Expected input:
+     *
+     * 16 kHz
+     * mono
+     * PCM 16-bit
+     *
+     * AudioEngine currently generates 20 ms chunks.
+     */
     fun sendAudioChunk(
         pcm: ByteArray
     ) {
@@ -811,6 +961,16 @@ class GeminiLiveClient(
             !setupCompleted ||
             pcm.isEmpty()
         ) {
+
+            if (
+                !manuallyClosed
+            ) {
+
+                scheduleReconnect(
+                    250L
+                )
+            }
+
             return
         }
 
@@ -854,15 +1014,13 @@ class GeminiLiveClient(
             !setupCompleted
         ) {
 
-            /*
-             * Do not silently discard the user's first speech
-             * after an unexpected connection loss.
-             *
-             * Trigger fast recovery and let the next mic chunk
-             * use the fresh session.
-             */
-            if (!manuallyClosed) {
-                scheduleReconnect(250L)
+            if (
+                !manuallyClosed
+            ) {
+
+                scheduleReconnect(
+                    250L
+                )
             }
 
             return
@@ -875,8 +1033,11 @@ class GeminiLiveClient(
 
         if (!sent) {
 
-            setupCompleted = false
-            transportState = "RECONNECTING"
+            setupCompleted =
+                false
+
+            transportState =
+                "RECONNECTING"
 
             onError(
                 "Audio send failed: WebSocket rejected the frame."
@@ -884,17 +1045,24 @@ class GeminiLiveClient(
 
             onDisconnected()
 
-            scheduleReconnect(250L)
+            scheduleReconnect(
+                250L
+            )
         }
     }
 
+    /**
+     * Send synchronous Gemini tool response.
+     */
     fun sendToolResponse(
         id: String,
         name: String,
         response: JSONObject
     ) {
 
-        if (!setupCompleted) {
+        if (
+            !setupCompleted
+        ) {
             return
         }
 
@@ -931,26 +1099,34 @@ class GeminiLiveClient(
                 )
             }
 
-        webSocket?.takeIf {
-            setupCompleted
-        }?.send(
-            message.toString()
-        )
+        webSocket
+            ?.takeIf {
+                setupCompleted
+            }
+            ?.send(
+                message.toString()
+            )
     }
 
-    /*
+    /**
      * Explicit client-side interruption.
      *
-     * This is kept as a secondary mechanism.
-     * Server-side interrupted events remain the primary
-     * interruption path.
+     * Server-side interruption remains the primary path.
      */
     fun sendInterrupt() {
 
-        if (!setupCompleted) {
+        if (
+            !setupCompleted
+        ) {
             return
         }
 
+        /*
+         * Keep this as a compatibility fallback.
+         *
+         * Gemini 3.1 prefers realtime input/activity
+         * driven interruption.
+         */
         val message =
             JSONObject().apply {
 
@@ -984,42 +1160,60 @@ class GeminiLiveClient(
             manuallyClosed ||
             reconnectScheduled
         ) {
+
             return
         }
 
-        reconnectScheduled = true
-        transportState = "RECONNECTING"
+        reconnectScheduled =
+            true
+
+        transportState =
+            "RECONNECTING"
 
         reconnectRunnable =
             Runnable {
 
-                reconnectScheduled = false
-                reconnectRunnable = null
+                reconnectScheduled =
+                    false
 
-                if (!manuallyClosed) {
+                reconnectRunnable =
+                    null
+
+                if (
+                    !manuallyClosed
+                ) {
+
                     connect()
                 }
             }
 
         handler.postDelayed(
             reconnectRunnable!!,
-            delayMs.coerceIn(250L, 5000L)
+            delayMs.coerceIn(
+                250L,
+                5000L
+            )
         )
     }
 
     private fun cancelReconnect() {
 
         reconnectRunnable?.let {
+
             handler.removeCallbacks(
                 it
             )
         }
 
-        reconnectRunnable = null
-        reconnectScheduled = false
+        reconnectRunnable =
+            null
+
+        reconnectScheduled =
+            false
     }
 
     private fun cancelTimers() {
+
         cancelReconnect()
     }
 
@@ -1027,12 +1221,15 @@ class GeminiLiveClient(
         manual: Boolean = true
     ) {
 
-        manuallyClosed = manual
+        manuallyClosed =
+            manual
 
         cancelTimers()
 
         synchronized(this) {
-            connectionGeneration += 1L
+
+            connectionGeneration +=
+                1L
         }
 
         webSocket?.close(
@@ -1040,12 +1237,16 @@ class GeminiLiveClient(
             "Client closed"
         )
 
-        webSocket = null
+        webSocket =
+            null
 
-        setupCompleted = false
+        setupCompleted =
+            false
 
         transportState =
-            if (manual) {
+            if (
+                manual
+            ) {
                 "DISCONNECTED"
             } else {
                 "RECONNECTING"

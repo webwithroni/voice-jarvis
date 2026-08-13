@@ -6,6 +6,8 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -15,75 +17,123 @@ class AudioEngine(
     private val onMicChunk: (ByteArray) -> Unit,
     private val onMicAmplitude: (Float) -> Unit,
     private val onPlaybackAmplitude: (Float) -> Unit,
-    private val onPlaybackIdle: () -> Unit
+    private val onPlaybackIdle: () -> Unit,
+    private val onRecordingError: (String) -> Unit
 ) {
 
     companion object {
 
-        private const val TAG = "AudioEngine"
+        private const val TAG =
+            "AudioEngine"
 
         /*
-         * Gemini Live:
+         * Gemini Live input:
          *
          * 16 kHz
          * mono
          * 16-bit PCM
          *
-         * 20 ms = 640 bytes
+         * 20 ms = 320 samples
+         * 320 samples × 2 bytes = 640 bytes
          */
-        private const val MIC_SAMPLE_RATE = 16_000
+        private const val MIC_SAMPLE_RATE =
+            16_000
+
         private const val MIC_CHANNELS =
             AudioFormat.CHANNEL_IN_MONO
+
         private const val MIC_ENCODING =
             AudioFormat.ENCODING_PCM_16BIT
 
-        private const val MIC_CHUNK_BYTES = 640
+        private const val MIC_CHUNK_BYTES =
+            640
 
         /*
-         * Gemini Live output:
-         * 24 kHz mono 16-bit PCM.
+         * Gemini native audio output:
+         *
+         * 24 kHz
+         * mono
+         * 16-bit PCM
          */
-        private const val SPEAKER_SAMPLE_RATE = 24_000
+        private const val SPEAKER_SAMPLE_RATE =
+            24_000
+
         private const val SPEAKER_CHANNELS =
             AudioFormat.CHANNEL_OUT_MONO
+
         private const val SPEAKER_ENCODING =
             AudioFormat.ENCODING_PCM_16BIT
 
         /*
-         * Keep the playback queue small.
+         * Small bounded queue.
          *
-         * A huge queue creates audible latency when the
-         * user interrupts Jarvis.
-         */
-        /*
-         * Keep enough buffered PCM to absorb normal network
-         * jitter without dropping any speech.
+         * Normal playback does not drop audio.
          *
-         * We NEVER discard audio during normal playback.
-         * Interruption explicitly clears this queue.
+         * Interruption explicitly clears the queue.
          */
-        private const val MAX_PLAYBACK_QUEUE = 48
+        private const val MAX_PLAYBACK_QUEUE =
+            48
     }
 
-    private var audioRecord: AudioRecord? = null
-    private var recordThread: Thread? = null
+    private var audioRecord: AudioRecord? =
+        null
+
+    private var recordThread: Thread? =
+        null
+
+
+    /*
+     * Realtime conversational audio effects.
+     *
+     * Availability depends on the Android device/OEM.
+     */
+    private var echoCanceler: AcousticEchoCanceler? = null
+    private var noiseSuppressor: NoiseSuppressor? = null
+    @Volatile
+    private var recording =
+        false
+
+    /*
+     * Public control used by JarvisService.
+     *
+     * IMPORTANT:
+     *
+     * This does NOT automatically change when Jarvis
+     * starts speaking.
+     *
+     * Gemini must continue receiving microphone audio
+     * so server-side VAD can detect barge-in.
+     */
+    @Volatile
+    var micSendEnabled =
+        true
+
+    private var audioTrack: AudioTrack? =
+        null
+
+    private var playThread: Thread? =
+        null
 
     @Volatile
-    private var recording = false
-
-    @Volatile
-    var micSendEnabled = true
-
-    private var audioTrack: AudioTrack? = null
-    private var playThread: Thread? = null
-
-    @Volatile
-    private var playing = false
+    private var playing =
+        false
 
     private val playbackQueue =
         LinkedBlockingQueue<ByteArray>(
             MAX_PLAYBACK_QUEUE
         )
+
+    private val playbackDispatch =
+        java.util.concurrent.Executors.newSingleThreadExecutor {
+            runnable ->
+            Thread(
+                runnable,
+                "Jarvis-Playback-Dispatch"
+            ).apply {
+                isDaemon = true
+            }
+        }
+
 
     fun startRecording() {
 
@@ -114,8 +164,8 @@ class AudioEngine(
         }
 
         /*
-         * We need enough internal room for Android,
-         * but we deliberately READ only 20 ms at a time.
+         * Give Android enough internal buffer space,
+         * while still reading only 20 ms chunks.
          */
         val recordBufferSize =
             maxOf(
@@ -127,7 +177,7 @@ class AudioEngine(
 
             audioRecord =
                 AudioRecord(
-                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                     MIC_SAMPLE_RATE,
                     MIC_CHANNELS,
                     MIC_ENCODING,
@@ -156,12 +206,95 @@ class AudioEngine(
             )
 
             audioRecord?.release()
+
             audioRecord = null
 
             return
         }
+        /*
+         * Configure Android conversational audio processing.
+         *
+         * These effects are optional and device-dependent.
+         */
+
+        val audioSessionId =
+            audioRecord?.audioSessionId ?: 0
+
+        if (audioSessionId != 0) {
+
+            if (
+                AcousticEchoCanceler.isAvailable()
+            ) {
+
+                try {
+
+                    echoCanceler =
+                        AcousticEchoCanceler.create(
+                            audioSessionId
+                        )
+
+                    echoCanceler?.enabled = true
+
+                    Log.i(
+                        TAG,
+                        "AcousticEchoCanceler enabled."
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.w(
+                        TAG,
+                        "AcousticEchoCanceler failed: ${e.message}"
+                    )
+                }
+
+            } else {
+
+                Log.i(
+                    TAG,
+                    "AcousticEchoCanceler unavailable."
+                )
+            }
+
+            if (
+                NoiseSuppressor.isAvailable()
+            ) {
+
+                try {
+
+                    noiseSuppressor =
+                        NoiseSuppressor.create(
+                            audioSessionId
+                        )
+
+                    noiseSuppressor?.enabled = true
+
+                    Log.i(
+                        TAG,
+                        "NoiseSuppressor enabled."
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.w(
+                        TAG,
+                        "NoiseSuppressor failed: ${e.message}"
+                    )
+                }
+
+            } else {
+
+                Log.i(
+                    TAG,
+                    "NoiseSuppressor unavailable."
+                )
+            }
+        }
+
+
 
         recording = true
+
         micSendEnabled = true
 
         try {
@@ -179,6 +312,7 @@ class AudioEngine(
             recording = false
 
             audioRecord?.release()
+
             audioRecord = null
 
             return
@@ -188,7 +322,15 @@ class AudioEngine(
             Thread(
                 {
 
-                    val buffer =
+
+
+                    /*
+                     * Realtime microphone capture.
+                     */
+                    android.os.Process.setThreadPriority(
+                        android.os.Process.THREAD_PRIORITY_URGENT_AUDIO
+                    )
+val buffer =
                         ByteArray(
                             MIC_CHUNK_BYTES
                         )
@@ -220,7 +362,8 @@ class AudioEngine(
                                 break
                             }
 
-                        if (read ==
+                        if (
+                            read ==
                             AudioRecord.ERROR_INVALID_OPERATION ||
                             read ==
                             AudioRecord.ERROR_BAD_VALUE
@@ -228,15 +371,32 @@ class AudioEngine(
 
                             continue
                         }
+                        if (
+                            read ==
+                            AudioRecord.ERROR_DEAD_OBJECT
+                        ) {
+
+                            Log.e(
+                                TAG,
+                                "AudioRecord returned ERROR_DEAD_OBJECT."
+                            )
+
+                            recording = false
+
+                            onRecordingError(
+                                "AudioRecord became unavailable."
+                            )
+
+                            break
+                        }
+
+
 
                         if (read <= 0) {
                             continue
                         }
 
-                        /*
-                         * Always send exactly the bytes
-                         * that were actually captured.
-                         */
+
                         val chunk =
                             if (
                                 read ==
@@ -255,8 +415,8 @@ class AudioEngine(
                         /*
                          * Amplitude is UI-only.
                          *
-                         * It must NOT decide whether audio
-                         * gets sent to Gemini.
+                         * It must NEVER decide whether
+                         * Gemini receives audio.
                          */
                         onMicAmplitude(
                             calculateRms(
@@ -295,6 +455,33 @@ class AudioEngine(
             recordThread?.join(250)
         } catch (_: Exception) {
         }
+        /*
+         * Release audio effects before the AudioRecord session.
+         */
+        try {
+            echoCanceler?.enabled = false
+        } catch (_: Exception) {
+        }
+
+        try {
+            echoCanceler?.release()
+        } catch (_: Exception) {
+        }
+
+        try {
+            noiseSuppressor?.enabled = false
+        } catch (_: Exception) {
+        }
+
+        try {
+            noiseSuppressor?.release()
+        } catch (_: Exception) {
+        }
+
+        echoCanceler = null
+        noiseSuppressor = null
+
+
 
         try {
             audioRecord?.release()
@@ -302,6 +489,8 @@ class AudioEngine(
         }
 
         audioRecord = null
+
+
         recordThread = null
     }
 
@@ -384,6 +573,7 @@ class AudioEngine(
             )
 
             audioTrack?.release()
+
             audioTrack = null
 
             return
@@ -395,7 +585,15 @@ class AudioEngine(
             Thread(
                 {
 
-                    while (playing) {
+
+
+                    /*
+                     * Realtime speaker playback.
+                     */
+                    android.os.Process.setThreadPriority(
+                        android.os.Process.THREAD_PRIORITY_URGENT_AUDIO
+                    )
+while (playing) {
 
                         val chunk =
                             try {
@@ -410,21 +608,13 @@ class AudioEngine(
                                 null
                             }
 
-                        if (
-                            chunk == null
-                        ) {
+                        if (chunk == null) {
 
-                            /*
-                             * Only report idle when there is genuinely
-                             * no queued PCM left.
-                             *
-                             * JarvisService additionally checks whether
-                             * Gemini has completed the response turn.
-                             */
                             if (
                                 playing &&
                                 playbackQueue.isEmpty()
                             ) {
+
                                 onPlaybackIdle()
                             }
 
@@ -443,7 +633,8 @@ class AudioEngine(
 
                         try {
 
-                            var offset = 0
+                            var offset =
+                                0
 
                             while (
                                 offset <
@@ -457,13 +648,16 @@ class AudioEngine(
                                         offset,
                                         chunk.size - offset,
                                         AudioTrack.WRITE_BLOCKING
-                                    ) ?: -1
+                                    )
+                                        ?: -1
 
-                                if (written <= 0) {
+                                if (
+                                    written <= 0
+                                ) {
 
                                     Log.w(
                                         TAG,
-                                        "AudioTrack wrote $written bytes; stopping current chunk."
+                                        "AudioTrack wrote $written bytes."
                                     )
 
                                     break
@@ -497,53 +691,70 @@ class AudioEngine(
             pcm.isEmpty() ||
             !playing
         ) {
+
             return
         }
 
         /*
-         * NEVER drop PCM during normal playback.
+         * IMPORTANT:
          *
-         * Dropping even a single speech chunk causes:
+         * NEVER block the Gemini WebSocket callback thread.
          *
-         * - missing syllables
-         * - robotic audio
-         * - accelerated sounding speech
-         * - incomplete words
+         * playbackQueue is intentionally bounded and
+         * playbackQueue.put() may block when the queue is full.
          *
-         * The queue is intentionally bounded, so if network
-         * delivery temporarily outruns playback, this producer
-         * waits instead of deleting audio.
+         * Gemini's handleMessage() runs from the OkHttp
+         * WebSocket callback, so blocking here can prevent
+         * Gemini from delivering:
          *
-         * clearPlaybackQueue() remains the explicit interruption
-         * path.
+         * - interrupted
+         * - input transcription
+         * - output transcription
+         * - turnComplete
+         * - generationComplete
+         * - goAway
+         * - session resumption updates
+         *
+         * The potentially blocking queue operation therefore
+         * runs on a dedicated playback producer thread.
+         *
+         * Normal playback still NEVER drops PCM.
+         *
+         * clearPlaybackQueue() remains the explicit discard
+         * path for barge-in/interruption.
          */
-        try {
 
-            playbackQueue.put(
-                pcm.copyOf()
-            )
+        val copy =
+            pcm.copyOf()
 
-        } catch (_: InterruptedException) {
+        playbackDispatch.execute {
 
-            Thread.currentThread().interrupt()
+            try {
+
+                playbackQueue.put(
+                    copy
+                )
+
+            } catch (_: InterruptedException) {
+
+                Thread.currentThread().interrupt()
+            }
         }
     }
 
     fun clearPlaybackQueue() {
 
         /*
-         * Explicit barge-in / interruption path.
-         *
-         * Normal playback NEVER drops PCM.
-         * Interruption is the one place where all queued
-         * response audio must be discarded immediately.
+         * Immediate barge-in flush.
          */
         playbackQueue.clear()
 
         try {
 
             audioTrack?.pause()
+
             audioTrack?.flush()
+
             audioTrack?.play()
 
         } catch (e: Exception) {
@@ -577,13 +788,20 @@ class AudioEngine(
         }
 
         audioTrack = null
+
         playThread = null
     }
 
     fun release() {
 
         stopRecording()
+
         stopPlayback()
+
+        /*
+         * Stop the playback producer thread.
+         */
+        playbackDispatch.shutdownNow()
     }
 
     private fun calculateRms(
@@ -594,8 +812,11 @@ class AudioEngine(
             return 0f
         }
 
-        var sum = 0.0
-        var i = 0
+        var sum =
+            0.0
+
+        var i =
+            0
 
         while (
             i + 1 <
@@ -603,18 +824,23 @@ class AudioEngine(
         ) {
 
             val low =
-                buffer[i].toInt() and 0xFF
+                buffer[i]
+                    .toInt() and 0xFF
 
             val high =
-                buffer[i + 1].toInt()
+                buffer[i + 1]
+                    .toInt()
 
             val sample =
-                ((high shl 8) or low)
+                (
+                    (high shl 8) or
+                        low
+                    )
                     .toShort()
 
             sum +=
                 sample.toDouble() *
-                sample.toDouble()
+                    sample.toDouble()
 
             i += 2
         }
@@ -630,7 +856,7 @@ class AudioEngine(
             sqrt(
                 sum / samples
             ) / 32768.0
-        )
+            )
             .toFloat()
             .coerceIn(
                 0f,

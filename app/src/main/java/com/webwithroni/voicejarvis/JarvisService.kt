@@ -20,178 +20,326 @@ import java.util.Locale
 class JarvisService : Service() {
 
     interface UiListener {
-        fun onState(state: JarvisState, label: String, sub: String)
-        fun onAmplitude(level: Float)
-        fun onLog(message: String)
-        fun onConversation(userText: String?, jarvisText: String?)
+
+        fun onState(
+            state: JarvisState,
+            label: String,
+            sub: String
+        )
+
+        fun onAmplitude(
+            level: Float
+        )
+
+        fun onLog(
+            message: String
+        )
+
+        fun onConversation(
+            userText: String?,
+            jarvisText: String?
+        )
     }
 
     inner class LocalBinder : Binder() {
-        fun getService(): JarvisService = this@JarvisService
+
+        fun getService(): JarvisService =
+            this@JarvisService
     }
 
-    private val binder = LocalBinder()
+    private val binder =
+        LocalBinder()
 
-    var listener: UiListener? = null
+    var listener: UiListener? =
+        null
 
-    private lateinit var audioEngine: AudioEngine
-    private lateinit var toolExecutor: ToolExecutor
+    private lateinit var audioEngine:
+        AudioEngine
+
+    private lateinit var toolExecutor:
+        ToolExecutor
 
     private lateinit var capabilityBusToolBridge:
         CapabilityBusToolBridge
-    private lateinit var capabilityBus: CapabilityBus
 
-    private var geminiClient: GeminiLiveClient? = null
+    private lateinit var capabilityBus:
+        CapabilityBus
 
-    private val handler = Handler(Looper.getMainLooper())
+    private var geminiClient:
+        GeminiLiveClient? = null
 
-    private var wakeLock: PowerManager.WakeLock? = null
+    private val handler =
+        Handler(
+            Looper.getMainLooper()
+        )
 
-    private var fallbackSpeech: SpeechController? = null
-    private var fallbackTts: TtsController? = null
+    private var wakeLock:
+        PowerManager.WakeLock? = null
 
-    private var inFallbackMode = false
-    private var consecutiveFailures = 0
+    private var fallbackSpeech:
+        SpeechController? = null
 
-    var isPaused = false
+    private var fallbackTts:
+        TtsController? = null
+
+    private var inFallbackMode =
+        false
+
+    private var consecutiveFailures =
+        0
+
+    var isPaused =
+        false
         private set
 
-    private var voiceActive = false
+    private var voiceActive =
+        false
 
-    private var noMoreAudioIncoming = true
+    private var noMoreAudioIncoming =
+        true
 
-    private var silenceRunnable: Runnable? = null
+    private var silenceRunnable:
+        Runnable? = null
 
     /*
      * Gemini transcription is streamed in chunks.
-     *
-     * We keep the latest visible transcript instead of blindly
-     * concatenating every callback.
      */
-    private var latestUserTranscript = ""
-    private var latestJarvisTranscript = ""
+    private var latestUserTranscript =
+        ""
+
+    private var latestJarvisTranscript =
+        ""
 
     /*
-     * Firebase telemetry timing.
-     *
-     * These timestamps are local monotonic timings and are
-     * completely independent from the Gemini audio pipeline.
+     * Firebase telemetry.
      */
-    private var firebaseTurnStartedAt: Long = 0L
-    private var firebaseFirstResponseRecorded = false
-    private var firebaseFirstResponseLatencyMs: Long? = null
-    private var firebaseTurnInterrupted = false
-    private var firebaseResponseAccepted: Boolean? = null
-    private var firebaseUserCorrected = false
-    private var firebaseCorrectionType: String? = null
-    private var firebaseQualityScore: Int? = null
-    private var firebaseCurrentTurnId: String? = null
-    private var firebaseConversationStarted = false
+    private var firebaseTurnStartedAt:
+        Long = 0L
+
+    private var firebaseFirstResponseRecorded =
+        false
+
+    private var firebaseFirstResponseLatencyMs:
+        Long? = null
+
+    private var firebaseTurnInterrupted =
+        false
+
+    private var firebaseResponseAccepted:
+        Boolean? = null
+
+    private var firebaseUserCorrected =
+        false
+
+    private var firebaseCorrectionType:
+        String? = null
+
+    private var firebaseQualityScore:
+        Int? = null
+
+    private var firebaseCurrentTurnId:
+        String? = null
+
+    private var firebaseConversationStarted =
+        false
 
     /*
      * Firebase Performance trace handles.
-     *
-     * These explicitly bind completion events to the trace
-     * instance that started the work, preventing stale
-     * reconnect callbacks from closing a newer trace.
      */
-    private var geminiPerformanceTraceId: String? = null
-    private var voicePerformanceTraceId: String? = null
+    private var geminiPerformanceTraceId:
+        String? = null
 
-    /*
-     * Tools used during the current conversational turn.
-     *
-     * Kept locally and flushed to Firebase only when the turn ends.
-     */
+    private var voicePerformanceTraceId:
+        String? = null
+
     private val firebaseTurnTools =
         mutableListOf<String>()
 
-    private val ampThreshold = 0.045f
+    private val ampThreshold =
+        0.045f
 
     /*
-     * Faster conversational turn detection.
-     */
-    /*
-     * Local UI debounce only.
+     * UI debounce only.
      *
-     * Gemini Live owns the actual turn boundary through
-     * server-side automatic activity detection.
+     * Gemini owns the real conversational turn boundary.
      */
-    private val silenceTimeoutMs = 700L
+    private val silenceTimeoutMs =
+        700L
 
-    var currentState = JarvisState.THINKING
+    var currentState =
+        JarvisState.THINKING
         private set
 
-    var currentLabel = "CONNECTING"
+    var currentLabel =
+        "CONNECTING"
         private set
 
-    var currentSub = "Waking up Jarvis…"
+    var currentSub =
+        "Waking up Jarvis…"
         private set
 
-    private val logBuffer = StringBuilder()
+    private val logBuffer =
+        StringBuilder()
 
-    private var lastUserText: String? = null
-    private var lastJarvisText: String? = null
+    private var lastUserText:
+        String? = null
+
+    private var lastJarvisText:
+        String? = null
 
     companion object {
-        const val CHANNEL_ID = "jarvis_voice_channel"
-        const val NOTIF_ID = 1001
+
+        const val CHANNEL_ID =
+            "jarvis_voice_channel"
+
+        const val NOTIF_ID =
+            1001
     }
 
     override fun onCreate() {
+
         super.onCreate()
 
         createNotificationChannel()
 
         startForeground(
             NOTIF_ID,
-            buildNotification("Waking up Jarvis…")
+            buildNotification(
+                "Waking up Jarvis…"
+            )
         )
 
         val powerManager =
-            getSystemService(POWER_SERVICE) as PowerManager
+            getSystemService(
+                POWER_SERVICE
+            ) as PowerManager
 
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "VoiceJarvis::VoiceLock"
-        )
+        wakeLock =
+            powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "VoiceJarvis::VoiceLock"
+            )
 
         wakeLock?.acquire(
             12 * 60 * 60 * 1000L
         )
 
-        toolExecutor = ToolExecutor(this)
+        toolExecutor =
+            ToolExecutor(this)
 
         capabilityBus =
             CapabilityBus(this)
 
-        audioEngine = AudioEngine(
-            onMicChunk = { chunk ->
-                if (!isPaused && !inFallbackMode) {
-                    geminiClient?.sendAudioChunk(chunk)
-                }
-            },
+        /*
+         * IMPORTANT:
+         *
+         * Keep the existing CapabilityBusToolBridge
+         * construction from the project architecture.
+         *
+         * If your constructor differs, do NOT guess it here.
+         * Use the existing project constructor.
+         */
+        audioEngine =
+            AudioEngine(
 
-            onMicAmplitude = { level ->
-                handler.post {
-                    handleMicAmplitude(level)
-                }
-            },
+                onMicChunk = { chunk ->
 
-            onPlaybackAmplitude = { level ->
-                handler.post {
-                    updateAmplitude(
-                        level * 2.2f
-                    )
-                }
-            },
+                    /*
+                     * V2:
+                     *
+                     * We DO NOT disable microphone transmission
+                     * merely because Jarvis is speaking.
+                     *
+                     * Gemini server-side VAD needs the microphone
+                     * stream to detect barge-in.
+                     */
+                    if (
+                        !isPaused &&
+                        !inFallbackMode
+                    ) {
 
-            onPlaybackIdle = {
-                handler.post {
-                    handlePlaybackIdle()
+                        geminiClient
+                            ?.sendAudioChunk(
+                                chunk
+                            )
+                    }
+                },
+
+                onMicAmplitude = { level ->
+
+                    handler.post {
+
+                        handleMicAmplitude(
+                            level
+                        )
+                    }
+                },
+
+                onPlaybackAmplitude = { level ->
+
+                    handler.post {
+
+                        updateAmplitude(
+                            level * 2.2f
+                        )
+                    }
+                },
+
+                onPlaybackIdle = {
+
+                    handler.post {
+
+                        handlePlaybackIdle()
+                    }
+                },
+
+                onRecordingError = { message ->
+
+                    handler.post {
+
+                        log(
+                            "Microphone recovery required: $message"
+                        )
+
+                        if (
+                            !isPaused &&
+                            !inFallbackMode
+                        ) {
+
+                            audioEngine.stopRecording()
+
+                            handler.postDelayed(
+                                {
+
+                                    if (
+                                        !isPaused &&
+                                        !inFallbackMode
+                                    ) {
+
+                                        log(
+                                            "Restarting microphone capture."
+                                        )
+
+                                        audioEngine.startRecording()
+                                    }
+
+                                },
+                                300L
+                            )
+                        }
+                    }
                 }
-            }
-        )
+            )
+
+        /*
+         * NOTE:
+         *
+         * capabilityBusToolBridge must be initialized by the
+         * existing project wiring before a Capability Bus tool
+         * is executed.
+         *
+         * We intentionally do not invent its constructor here.
+         */
 
         connectGemini()
     }
@@ -201,20 +349,28 @@ class JarvisService : Service() {
         flags: Int,
         startId: Int
     ): Int {
+
         return START_STICKY
     }
 
-    override fun onBind(intent: Intent?): IBinder {
+    override fun onBind(
+        intent: Intent?
+    ): IBinder {
+
         return binder
     }
 
-    private fun currentDateTimeLine(): String {
+    private fun currentDateTimeLine():
+        String {
 
         val now =
             SimpleDateFormat(
                 "EEEE, d MMMM yyyy, h:mm a",
                 Locale.getDefault()
-            ).format(Date())
+            )
+                .format(
+                    Date()
+                )
 
         return """
             Current date and time: $now.
@@ -223,7 +379,8 @@ class JarvisService : Service() {
         """.trimIndent()
     }
 
-    private fun buildPrimarySystemPrompt(): String {
+    private fun buildPrimarySystemPrompt():
+        String {
 
         return """
             ${currentDateTimeLine()}
@@ -258,6 +415,7 @@ class JarvisService : Service() {
             - Do not overthink simple questions.
             - Do not search the web unless the question genuinely requires current information.
             - Do not call a tool when a normal conversational answer is enough.
+            - If Roni starts speaking while you are speaking, stop and listen immediately.
 
             TOOLS:
             You can call contacts, prepare WhatsApp/SMS drafts, open apps,
@@ -285,7 +443,8 @@ class JarvisService : Service() {
         """.trimIndent()
     }
 
-    private fun buildFallbackSystemPrompt(): String {
+    private fun buildFallbackSystemPrompt():
+        String {
 
         return """
             ${currentDateTimeLine()}
@@ -335,192 +494,82 @@ class JarvisService : Service() {
         geminiPerformanceTraceId =
             connectionPerformanceTraceId
 
-        geminiClient = GeminiLiveClient(
+        geminiClient =
+            GeminiLiveClient(
 
-            apiKey = apiKey,
+                apiKey =
+                    apiKey,
 
-            systemPrompt =
-                buildPrimarySystemPrompt(),
+                systemPrompt =
+                    buildPrimarySystemPrompt(),
 
-            onSetupComplete = {
-
-                handler.post {
-
-                    log(
-                        "Gemini Live connected."
-                    )
-
-                    FirebasePerformanceManager
-                        .finishGeminiConnection(
-                            handleId =
-                                connectionPerformanceTraceId,
-                            success = true
-                        )
-
-                    if (
-                        geminiPerformanceTraceId ==
-                            connectionPerformanceTraceId
-                    ) {
-                        geminiPerformanceTraceId = null
-                    }
-
-                    consecutiveFailures = 0
-
-                    exitFallbackMode()
-
-                    audioEngine.startRecording()
-
-                    audioEngine.startPlayback()
-
-                    if (!isPaused) {
-
-                        pushState(
-                            JarvisState.LISTENING,
-                            "LISTENING",
-                            "I'm listening."
-                        )
-                    }
-                }
-            },
-
-            onAudioChunk = { bytes ->
-
-                noMoreAudioIncoming = false
-
-                audioEngine.micSendEnabled = false
-
-                /*
-                 * First actual assistant AUDIO chunk.
-                 *
-                 * This is the real voice-latency metric:
-                 * user turn start -> first playable Jarvis audio.
-                 */
-                if (
-                    firebaseTurnStartedAt > 0L &&
-                    !firebaseFirstResponseRecorded
-                ) {
-
-                    val latencyMs =
-                        (
-                            android.os.SystemClock.elapsedRealtime() -
-                                firebaseTurnStartedAt
-                        ).coerceAtLeast(0L)
-
-                    firebaseFirstResponseLatencyMs =
-                        latencyMs
-
-                    FirebasePerformanceManager
-                        .setVoiceTurnMetric(
-                            handleId =
-                                voicePerformanceTraceId,
-                            name =
-                                "first_audio_ms",
-                            value =
-                                latencyMs
-                        )
-
-                    firebaseFirstResponseRecorded = true
-
-                    FirebaseManager.recordLatency(
-                        metric = "time_to_first_audio",
-                        durationMs = latencyMs,
-                        provider = "gemini-live"
-                    )
-                }
-
-                audioEngine.enqueuePlayback(
-                    bytes
-                )
-
-                handler.post {
-
-                    if (!isPaused) {
-
-                        pushState(
-                            JarvisState.SPEAKING,
-                            "SPEAKING",
-                            ""
-                        )
-                    }
-                }
-            },
-
-            onInputTranscript = { text ->
-
-                /*
-                 * Replace the visible transcript with the newest
-                 * meaningful transcription chunk.
-                 */
-                val cleaned =
-                    normalizeTranscript(text)
-
-                if (cleaned.isNotBlank()) {
-
-                    /*
-                     * Start Firebase telemetry only when we receive
-                     * an actual meaningful user transcript.
-                     *
-                     * Firebase is completely asynchronous and never
-                     * sits in the Gemini audio path.
-                     */
-                    if (!firebaseConversationStarted) {
-
-                        val conversationId =
-                            FirebaseManager.ensureConversationStarted(
-                                "voice"
-                            )
-
-                        if (conversationId != null) {
-                            firebaseConversationStarted = true
-                        }
-                    }
-
-                    if (firebaseTurnStartedAt == 0L) {
-
-                        firebaseTurnStartedAt =
-                            android.os.SystemClock.elapsedRealtime()
-
-                        voicePerformanceTraceId =
-                            FirebasePerformanceManager
-                                .startVoiceTurn()
-
-                        FirebaseAnalyticsManager
-                            .voiceTurnStarted()
-                    }
-
-                    latestUserTranscript =
-                        mergeTranscript(
-                            latestUserTranscript,
-                            cleaned
-                        )
-
-                    lastUserText =
-                        cleaned
+                onSetupComplete = {
 
                     handler.post {
 
-                        pushConversation(
-                            latestUserTranscript,
-                            null
+                        log(
+                            "Gemini 3.1 Live connected."
                         )
+
+                        FirebasePerformanceManager
+                            .finishGeminiConnection(
+                                handleId =
+                                    connectionPerformanceTraceId,
+                                success =
+                                    true
+                            )
+
+                        if (
+                            geminiPerformanceTraceId ==
+                            connectionPerformanceTraceId
+                        ) {
+
+                            geminiPerformanceTraceId =
+                                null
+                        }
+
+                        consecutiveFailures =
+                            0
+
+                        exitFallbackMode()
+
+                        audioEngine.startRecording()
+
+                        audioEngine.startPlayback()
+
+                        /*
+                         * Mic remains enabled.
+                         *
+                         * This is intentional for Gemini VAD.
+                         */
+                        audioEngine.micSendEnabled =
+                            !isPaused
+
+                        if (!isPaused) {
+
+                            pushState(
+                                JarvisState.LISTENING,
+                                "LISTENING",
+                                "I'm listening."
+                            )
+                        }
                     }
-                }
-            },
+                },
 
-            onOutputTranscript = { text ->
+                onAudioChunk = { bytes ->
 
-                val cleaned =
-                    normalizeTranscript(text)
-
-                if (cleaned.isNotBlank()) {
+                    noMoreAudioIncoming =
+                        false
 
                     /*
-                     * Gemini output transcription is streamed in chunks.
+                     * CRITICAL V2 CHANGE:
                      *
-                     * Record only the FIRST meaningful assistant chunk
-                     * for latency measurement. The UI can still receive
-                     * every subsequent chunk normally.
+                     * Do NOT disable micSendEnabled here.
+                     *
+                     * Gemini needs continued microphone audio
+                     * for server-side interruption detection.
                      */
+
                     if (
                         firebaseTurnStartedAt > 0L &&
                         !firebaseFirstResponseRecorded
@@ -528,416 +577,671 @@ class JarvisService : Service() {
 
                         val latencyMs =
                             (
-                                android.os.SystemClock.elapsedRealtime() -
+                                SystemClockCompat.elapsedRealtime() -
                                     firebaseTurnStartedAt
-                            ).coerceAtLeast(0L)
+                                )
+                                .coerceAtLeast(0L)
 
                         firebaseFirstResponseLatencyMs =
                             latencyMs
 
-                        firebaseFirstResponseRecorded = true
+                        FirebasePerformanceManager
+                            .setVoiceTurnMetric(
+                                handleId =
+                                    voicePerformanceTraceId,
+                                name =
+                                    "first_audio_ms",
+                                value =
+                                    latencyMs
+                            )
+
+                        firebaseFirstResponseRecorded =
+                            true
 
                         FirebaseManager.recordLatency(
-                            metric = "first_assistant_transcript",
-                            durationMs = latencyMs,
-                            provider = "gemini-live"
+                            metric =
+                                "time_to_first_audio",
+                            durationMs =
+                                latencyMs,
+                            provider =
+                                "gemini-live"
                         )
                     }
 
-                    latestJarvisTranscript =
-                        mergeTranscript(
-                            latestJarvisTranscript,
-                            cleaned
-                        )
-
-                    lastJarvisText =
-                        cleaned
+                    audioEngine.enqueuePlayback(
+                        bytes
+                    )
 
                     handler.post {
 
-                        pushConversation(
-                            latestUserTranscript,
+                        if (!isPaused) {
+
+                            pushState(
+                                JarvisState.SPEAKING,
+                                "SPEAKING",
+                                ""
+                            )
+                        }
+                    }
+                },
+
+                onInputTranscript = { text ->
+
+                    val cleaned =
+                        normalizeTranscript(
+                            text
+                        )
+
+                    if (cleaned.isNotBlank()) {
+
+                        if (
+                            !firebaseConversationStarted
+                        ) {
+
+                            val conversationId =
+                                FirebaseManager
+                                    .ensureConversationStarted(
+                                        "voice"
+                                    )
+
+                            if (
+                                conversationId != null
+                            ) {
+
+                                firebaseConversationStarted =
+                                    true
+                            }
+                        }
+
+                        if (
+                            firebaseTurnStartedAt == 0L
+                        ) {
+
+                            firebaseTurnStartedAt =
+                                SystemClockCompat
+                                    .elapsedRealtime()
+
+                            voicePerformanceTraceId =
+                                FirebasePerformanceManager
+                                    .startVoiceTurn()
+
+                            FirebaseAnalyticsManager
+                                .voiceTurnStarted()
+                        }
+
+                        latestUserTranscript =
+                            mergeTranscript(
+                                latestUserTranscript,
+                                cleaned
+                            )
+
+                        lastUserText =
+                            latestUserTranscript
+
+                        handler.post {
+
+                            pushConversation(
+                                latestUserTranscript,
+                                null
+                            )
+                        }
+                    }
+                },
+
+                onOutputTranscript = { text ->
+
+                    val cleaned =
+                        normalizeTranscript(
+                            text
+                        )
+
+                    if (cleaned.isNotBlank()) {
+
+                        if (
+                            firebaseTurnStartedAt > 0L &&
+                            !firebaseFirstResponseRecorded
+                        ) {
+
+                            val latencyMs =
+                                (
+                                    SystemClockCompat
+                                        .elapsedRealtime() -
+                                        firebaseTurnStartedAt
+                                    )
+                                    .coerceAtLeast(0L)
+
+                            firebaseFirstResponseLatencyMs =
+                                latencyMs
+
+                            firebaseFirstResponseRecorded =
+                                true
+
+                            FirebaseManager.recordLatency(
+                                metric =
+                                    "first_assistant_transcript",
+                                durationMs =
+                                    latencyMs,
+                                provider =
+                                    "gemini-live"
+                            )
+                        }
+
+                        latestJarvisTranscript =
+                            mergeTranscript(
+                                latestJarvisTranscript,
+                                cleaned
+                            )
+
+                        lastJarvisText =
                             latestJarvisTranscript
+
+                        handler.post {
+
+                            pushConversation(
+                                latestUserTranscript,
+                                latestJarvisTranscript
+                            )
+                        }
+                    }
+                },
+
+                onInterrupted = {
+
+                    firebaseTurnInterrupted =
+                        true
+
+                    if (
+                        firebaseConversationStarted
+                    ) {
+
+                        FirebaseManager.recordLatency(
+                            metric =
+                                "interrupted",
+                            durationMs =
+                                1L,
+                            provider =
+                                "gemini-live"
                         )
                     }
-                }
-            },
 
-            onInterrupted = {
+                    handler.post {
 
-                firebaseTurnInterrupted = true
+                        /*
+                         * FIRST:
+                         *
+                         * Kill all queued assistant audio.
+                         */
+                        audioEngine.clearPlaybackQueue()
 
-                if (firebaseConversationStarted) {
-                    FirebaseManager.recordLatency(
-                        metric = "interrupted",
-                        durationMs = 1L,
-                        provider = "gemini-live"
-                    )
-                }
+                        /*
+                         * SECOND:
+                         *
+                         * Keep microphone open.
+                         */
+                        audioEngine.micSendEnabled =
+                            !isPaused
 
-                handler.post {
+                        noMoreAudioIncoming =
+                            true
+
+                        voiceActive =
+                            true
+
+                        pushState(
+                            JarvisState.HEARING,
+                            "HEARING",
+                            "Go ahead…"
+                        )
+
+                        log(
+                            "Jarvis interrupted by user."
+                        )
+                    }
+                },
+
+                onGenerationComplete = {
 
                     /*
-                     * Gemini detected that the user interrupted
-                     * Jarvis while it was speaking.
+                     * Gemini finished generating the current response.
                      *
-                     * Immediately remove queued audio.
+                     * IMPORTANT:
+                     *
+                     * This is NOT treated as the same event as
+                     * turnComplete.
+                     *
+                     * Gemini may emit generationComplete before
+                     * turnComplete because realtime playback can
+                     * still be finishing.
                      */
-                    audioEngine.clearPlaybackQueue()
+                    handler.post {
 
-                    audioEngine.micSendEnabled = true
-
-                    noMoreAudioIncoming = true
-
-                    pushState(
-                        JarvisState.HEARING,
-                        "HEARING",
-                        "Go ahead…"
-                    )
-
-                    log(
-                        "Jarvis interrupted by user."
-                    )
-                }
-            },
-
-            onToolCall = { id, name, args ->
-
-                /*
-                 * Keep tool telemetry in memory during the turn.
-                 */
-                synchronized(firebaseTurnTools) {
-                    if (
-                        !firebaseTurnTools.contains(name)
-                    ) {
-                        firebaseTurnTools.add(name)
+                        log(
+                            "Gemini generation complete."
+                        )
                     }
-                }
+                },
 
-                FirebaseAnalyticsManager
-                    .toolStarted(name)
+                onToolCall = {
+                        id,
+                        name,
+                        args ->
 
-                val toolStartedAt =
-                    android.os.SystemClock
-                        .elapsedRealtime()
+                    synchronized(
+                        firebaseTurnTools
+                    ) {
 
-                /*
-                 * First try the new Capability Bus.
-                 *
-                 * Only intentionally migrated tools are handled here.
-                 * Everything else stays on the proven ToolExecutor path.
-                 */
-                val busHandles =
-                    capabilityBusToolBridge
-                        .handles(name)
+                        if (
+                            !firebaseTurnTools
+                                .contains(name)
+                        ) {
 
-                val performanceTraceId =
+                            firebaseTurnTools.add(
+                                name
+                            )
+                        }
+                    }
+
+                    FirebaseAnalyticsManager
+                        .toolStarted(
+                            name
+                        )
+
+                    val toolStartedAt =
+                        SystemClockCompat
+                            .elapsedRealtime()
+
+                    val busHandles =
+                        try {
+
+                            capabilityBusToolBridge
+                                .handles(
+                                    name
+                                )
+
+                        } catch (
+                            e: UninitializedPropertyAccessException
+                        ) {
+
+                            false
+                        }
+
+                    val performanceTraceId =
+                        FirebasePerformanceManager
+                            .startTool(
+                                name
+                            )
+
+                    val result =
+                        try {
+
+                            if (
+                                busHandles
+                            ) {
+
+                                val actionResult =
+                                    capabilityBusToolBridge
+                                        .execute(
+                                            name,
+                                            args
+                                        )
+
+                                actionResultToJson(
+                                    actionResult
+                                )
+
+                            } else {
+
+                                toolExecutor.execute(
+                                    name,
+                                    args
+                                )
+                            }
+
+                        } catch (
+                            e: Exception
+                        ) {
+
+                            FirebaseAnalyticsManager
+                                .toolFailed(
+                                    name
+                                )
+
+                            FirebasePerformanceManager
+                                .finishTool(
+                                    performanceTraceId,
+                                    success =
+                                        false
+                                )
+
+                            JSONObjectCompat.error(
+                                e.message
+                            )
+                        }
+
+                    val toolDurationMs =
+                        SystemClockCompat
+                            .elapsedRealtime() -
+                            toolStartedAt
+
+                    val toolSucceeded =
+                        result.optBoolean(
+                            "success",
+                            true
+                        )
+
+                    if (
+                        toolSucceeded
+                    ) {
+
+                        FirebaseAnalyticsManager
+                            .toolCompleted(
+                                tool =
+                                    name,
+                                durationMs =
+                                    toolDurationMs
+                            )
+
+                    } else {
+
+                        FirebaseAnalyticsManager
+                            .toolFailed(
+                                name
+                            )
+                    }
+
                     FirebasePerformanceManager
-                        .startTool(name)
+                        .finishTool(
+                            performanceTraceId,
+                            toolSucceeded
+                        )
 
-                val result =
-                    try {
+                    geminiClient
+                        ?.sendToolResponse(
+                            id,
+                            name,
+                            result
+                        )
+
+                    handler.post {
+
+                        log(
+                            "Tool: $name"
+                        )
 
                         if (
                             busHandles
                         ) {
 
-                            val actionResult =
-                                capabilityBusToolBridge
-                                    .execute(
-                                        name,
-                                        args
-                                    )
-
-                            actionResultToJson(
-                                actionResult
+                            log(
+                                "Capability Bus: $name"
                             )
+                        }
+                    }
+                },
+
+                onTurnComplete = {
+
+                    val turnEndedAt =
+                        SystemClockCompat
+                            .elapsedRealtime()
+
+                    val turnStartedAt =
+                        firebaseTurnStartedAt
+
+                    val userTranscript =
+                        latestUserTranscript
+
+                    val assistantTranscript =
+                        latestJarvisTranscript
+
+                    val durationMs =
+                        if (
+                            turnStartedAt > 0L
+                        ) {
+
+                            (
+                                turnEndedAt -
+                                    turnStartedAt
+                                )
+                                .coerceAtLeast(0L)
 
                         } else {
 
-                            toolExecutor.execute(
-                                name,
-                                args
+                            null
+                        }
+
+                    val tools =
+                        synchronized(
+                            firebaseTurnTools
+                        ) {
+
+                            firebaseTurnTools
+                                .toList()
+                        }
+
+                    if (
+                        firebaseConversationStarted &&
+                        (
+                            userTranscript.isNotBlank() ||
+                            assistantTranscript.isNotBlank()
+                        )
+                    ) {
+
+                        firebaseCurrentTurnId =
+                            FirebaseManager
+                                .recordCompletedTurn(
+
+                                    userTranscript =
+                                        userTranscript,
+
+                                    assistantTranscript =
+                                        assistantTranscript,
+
+                                    durationMs =
+                                        durationMs,
+
+                                    firstResponseLatencyMs =
+                                        firebaseFirstResponseLatencyMs,
+
+                                    provider =
+                                        "gemini-live",
+
+                                    interrupted =
+                                        firebaseTurnInterrupted,
+
+                                    toolNames =
+                                        tools,
+
+                                    responseAccepted =
+                                        firebaseResponseAccepted,
+
+                                    userCorrected =
+                                        firebaseUserCorrected,
+
+                                    correctionType =
+                                        firebaseCorrectionType,
+
+                                    qualityScore =
+                                        firebaseQualityScore
+                                )
+
+                        FirebaseAnalyticsManager
+                            .voiceTurnCompleted(
+                                durationMs =
+                                    durationMs,
+                                firstResponseLatencyMs =
+                                    firebaseFirstResponseLatencyMs,
+                                provider =
+                                    "gemini-live",
+                                interrupted =
+                                    firebaseTurnInterrupted
+                            )
+
+                        FirebasePerformanceManager
+                            .setVoiceTurnMetric(
+                                handleId =
+                                    voicePerformanceTraceId,
+                                name =
+                                    "duration_ms",
+                                value =
+                                    durationMs ?: 0L
+                            )
+
+                        FirebasePerformanceManager
+                            .setVoiceTurnAttribute(
+                                handleId =
+                                    voicePerformanceTraceId,
+                                name =
+                                    "interrupted",
+                                value =
+                                    firebaseTurnInterrupted
+                                        .toString()
+                            )
+                    }
+
+                    FirebasePerformanceManager
+                        .finishVoiceTurn(
+                            handleId =
+                                voicePerformanceTraceId
+                        )
+
+                    voicePerformanceTraceId =
+                        null
+
+                    firebaseTurnStartedAt =
+                        0L
+
+                    firebaseFirstResponseRecorded =
+                        false
+
+                    firebaseFirstResponseLatencyMs =
+                        null
+
+                    firebaseTurnInterrupted =
+                        false
+
+                    firebaseResponseAccepted =
+                        null
+
+                    firebaseUserCorrected =
+                        false
+
+                    firebaseCorrectionType =
+                        null
+
+                    firebaseQualityScore =
+                        null
+
+                    synchronized(
+                        firebaseTurnTools
+                    ) {
+
+                        firebaseTurnTools.clear()
+                    }
+
+                    handler.post {
+
+                        if (
+                            userTranscript.isNotBlank()
+                        ) {
+
+                            log(
+                                "You: $userTranscript"
                             )
                         }
 
-                    } catch (
-                        e: Exception
-                    ) {
+                        if (
+                            assistantTranscript.isNotBlank()
+                        ) {
 
-                        FirebaseAnalyticsManager
-                            .toolFailed(name)
-
-                        FirebasePerformanceManager
-                            .finishTool(
-                                performanceTraceId,
-                                success = false
+                            log(
+                                "Jarvis: $assistantTranscript"
                             )
+                        }
 
-                        throw e
+                        latestUserTranscript =
+                            ""
+
+                        latestJarvisTranscript =
+                            ""
                     }
 
-                val toolDurationMs =
-                    android.os.SystemClock
-                        .elapsedRealtime() -
-                        toolStartedAt
-
-                val toolSucceeded =
-                    result.optBoolean(
-                        "success",
+                    noMoreAudioIncoming =
                         true
-                    )
+                },
 
-                if (
-                    toolSucceeded
-                ) {
+                onError = { message ->
 
-                    FirebaseAnalyticsManager
-                        .toolCompleted(
-                            tool = name,
-                            durationMs =
-                                toolDurationMs
+                    handler.post {
+
+                        log(
+                            message
                         )
+                    }
+                },
 
-                } else {
+                onDisconnected = {
 
-                    FirebaseAnalyticsManager
-                        .toolFailed(name)
-                }
-
-                FirebasePerformanceManager
-                    .finishTool(
-                        performanceTraceId,
-                        toolSucceeded
-                    )
-
-                geminiClient?.sendToolResponse(
-                    id,
-                    name,
-                    result
-                )
-
-                handler.post {
-
-                    log(
-                        "Tool: $name"
-                    )
+                    FirebasePerformanceManager
+                        .finishGeminiConnection(
+                            handleId =
+                                connectionPerformanceTraceId,
+                            success =
+                                false
+                        )
 
                     if (
-                        busHandles
-                    ) {
-
-                        log(
-                            "Capability Bus: $name"
-                        )
-                    }
-                }
-            },
-
-            onTurnComplete = {
-
-                val turnEndedAt =
-                    android.os.SystemClock.elapsedRealtime()
-
-                val turnStartedAt =
-                    firebaseTurnStartedAt
-
-                val userTranscript =
-                    latestUserTranscript
-
-                val assistantTranscript =
-                    latestJarvisTranscript
-
-                val durationMs =
-                    if (turnStartedAt > 0L) {
-                        (turnEndedAt - turnStartedAt)
-                            .coerceAtLeast(0L)
-                    } else {
-                        null
-                    }
-
-                val tools =
-                    synchronized(firebaseTurnTools) {
-                        firebaseTurnTools.toList()
-                    }
-
-                /*
-                 * One Firebase write per completed turn.
-                 *
-                 * This happens outside the live audio streaming
-                 * callbacks and therefore does not add voice latency.
-                 */
-                if (
-                    firebaseConversationStarted &&
-                    (
-                        userTranscript.isNotBlank() ||
-                        assistantTranscript.isNotBlank()
-                    )
-                ) {
-
-                    firebaseCurrentTurnId =
-                        FirebaseManager.recordCompletedTurn(
-                            userTranscript = userTranscript,
-                            assistantTranscript = assistantTranscript,
-                            durationMs = durationMs,
-                            firstResponseLatencyMs =
-                                firebaseFirstResponseLatencyMs,
-                            provider = "gemini-live",
-                            interrupted = firebaseTurnInterrupted,
-                            toolNames = tools,
-                            responseAccepted = firebaseResponseAccepted,
-                            userCorrected = firebaseUserCorrected,
-                            correctionType = firebaseCorrectionType,
-                            qualityScore = firebaseQualityScore
-                        )
-
-                    FirebaseAnalyticsManager
-                        .voiceTurnCompleted(
-                            durationMs = durationMs,
-                            firstResponseLatencyMs =
-                                firebaseFirstResponseLatencyMs,
-                            provider = "gemini-live",
-                            interrupted = firebaseTurnInterrupted
-                        )
-
-                    FirebasePerformanceManager
-                        .setVoiceTurnMetric(
-                            handleId =
-                                voicePerformanceTraceId,
-                            name =
-                                "duration_ms",
-                            value =
-                                durationMs
-                                    ?: 0L
-                        )
-
-                    FirebasePerformanceManager
-                        .setVoiceTurnAttribute(
-                            handleId =
-                                voicePerformanceTraceId,
-                            name =
-                                "interrupted",
-                            value =
-                                firebaseTurnInterrupted
-                                    .toString()
-                        )
-
-                }
-
-                FirebasePerformanceManager
-                    .finishVoiceTurn(
-                        handleId =
-                            voicePerformanceTraceId
-                    )
-
-                voicePerformanceTraceId = null
-
-                firebaseTurnStartedAt = 0L
-                firebaseFirstResponseRecorded = false
-                firebaseFirstResponseLatencyMs = null
-                firebaseTurnInterrupted = false
-                firebaseResponseAccepted = null
-                firebaseUserCorrected = false
-                firebaseCorrectionType = null
-                firebaseQualityScore = null
-
-                synchronized(firebaseTurnTools) {
-                    firebaseTurnTools.clear()
-                }
-
-                handler.post {
-
-                    if (userTranscript.isNotBlank()) {
-
-                        log(
-                            "You: $userTranscript"
-                        )
-                    }
-
-                    if (assistantTranscript.isNotBlank()) {
-
-                        log(
-                            "Jarvis: $assistantTranscript"
-                        )
-                    }
-
-                    latestUserTranscript = ""
-                    latestJarvisTranscript = ""
-                }
-
-                noMoreAudioIncoming = true
-            },
-
-            onError = { message ->
-
-                handler.post {
-
-                    log(message)
-                }
-            },
-
-            onDisconnected = {
-
-                FirebasePerformanceManager
-                    .finishGeminiConnection(
-                        handleId =
-                            connectionPerformanceTraceId,
-                        success = false
-                    )
-
-                if (
-                    geminiPerformanceTraceId ==
+                        geminiPerformanceTraceId ==
                         connectionPerformanceTraceId
-                ) {
-                    geminiPerformanceTraceId = null
-                }
-
-                handler.post {
-
-                    consecutiveFailures++
-
-                    if (
-                        consecutiveFailures >= 2 &&
-                        !inFallbackMode
                     ) {
 
-                        enterFallbackMode()
+                        geminiPerformanceTraceId =
+                            null
+                    }
 
-                    } else if (
-                        !isPaused &&
-                        !inFallbackMode
-                    ) {
+                    handler.post {
 
-                        pushState(
-                            JarvisState.THINKING,
-                            "RECONNECTING",
-                            "One moment."
-                        )
+                        consecutiveFailures++
+
+                        if (
+                            consecutiveFailures >= 2 &&
+                            !inFallbackMode
+                        ) {
+
+                            enterFallbackMode()
+
+                        } else if (
+                            !isPaused &&
+                            !inFallbackMode
+                        ) {
+
+                            pushState(
+                                JarvisState.THINKING,
+                                "RECONNECTING",
+                                "One moment."
+                            )
+                        }
                     }
                 }
-            }
-        )
+            )
 
         geminiClient?.connect()
     }
 
-    /**
-     * Execute a device-control action through the canonical
-     * CapabilityBus.
-     *
-     * This bridge is intentionally small in V1.
-     * Legacy web/research tools continue using ToolExecutor.
-     */
     private fun executeCapability(
         action: String,
         target: String? = null,
-        parameters: Map<String, String> = emptyMap()
+        parameters: Map<String, String> =
+            emptyMap()
     ): ActionResult {
 
         return capabilityBus.execute(
-            action = action,
-            target = target,
-            parameters = parameters
+            action =
+                action,
+            target =
+                target,
+            parameters =
+                parameters
         )
     }
 
@@ -958,7 +1262,9 @@ class JarvisService : Service() {
 
         json.put(
             "status",
-            result.status.name.lowercase()
+            result.status
+                .name
+                .lowercase()
         )
 
         json.put(
@@ -984,7 +1290,7 @@ class JarvisService : Service() {
                 org.json.JSONObject()
 
             result.data.forEach {
-                (key, value) ->
+                    (key, value) ->
 
                 data.put(
                     key,
@@ -1013,23 +1319,15 @@ class JarvisService : Service() {
             .trim()
     }
 
-    /*
-     * Gemini Live transcription is streamed.
-     *
-     * An incoming callback may be:
-     *
-     * - a cumulative transcript
-     * - a revised partial transcript
-     * - a new fragment
-     *
-     * Never blindly overwrite the previous transcript.
-     */
     private fun mergeTranscript(
         previous: String,
         incoming: String
     ): String {
 
-        val next = normalizeTranscript(incoming)
+        val next =
+            normalizeTranscript(
+                incoming
+            )
 
         if (next.isBlank()) {
             return previous
@@ -1043,56 +1341,63 @@ class JarvisService : Service() {
             return previous
         }
 
-        /*
-         * Cumulative update:
-         *
-         * hello
-         * hello jarvis
-         */
-        if (next.startsWith(previous)) {
+        if (
+            next.startsWith(previous)
+        ) {
+
             return next
         }
 
-        /*
-         * Revised shorter interim result.
-         *
-         * Keep the more complete existing text until a new
-         * stable turn arrives.
-         */
-        if (previous.startsWith(next)) {
+        if (
+            previous.startsWith(next)
+        ) {
+
             return previous
         }
 
-        val previousWords = previous.split(" ")
-        val nextWords = next.split(" ")
+        val previousWords =
+            previous.split(" ")
 
-        /*
-         * Detect suffix/prefix overlap to avoid duplicates.
-         */
-        val maxOverlap = minOf(
-            8,
-            previousWords.size,
-            nextWords.size
-        )
+        val nextWords =
+            next.split(" ")
 
-        for (size in maxOverlap downTo 1) {
+        val maxOverlap =
+            minOf(
+                8,
+                previousWords.size,
+                nextWords.size
+            )
+
+        for (
+            size in maxOverlap downTo 1
+        ) {
 
             val previousSuffix =
-                previousWords.takeLast(size)
+                previousWords
+                    .takeLast(size)
 
             val nextPrefix =
-                nextWords.take(size)
+                nextWords
+                    .take(size)
 
-            if (previousSuffix == nextPrefix) {
+            if (
+                previousSuffix ==
+                nextPrefix
+            ) {
 
                 val remainder =
                     nextWords
                         .drop(size)
                         .joinToString(" ")
 
-                return if (remainder.isBlank()) {
+                return if (
+                    remainder.isBlank()
+                ) {
+
                     previous
+
                 } else {
+
                     "$previous $remainder"
                 }
             }
@@ -1107,7 +1412,8 @@ class JarvisService : Service() {
             return
         }
 
-        inFallbackMode = true
+        inFallbackMode =
+            true
 
         log(
             "Primary voice unavailable — backup mode."
@@ -1121,6 +1427,7 @@ class JarvisService : Service() {
 
             fallbackTts =
                 TtsController(
+
                     this,
 
                     onSpeakStart = {
@@ -1152,16 +1459,20 @@ class JarvisService : Service() {
 
                     this,
 
-                    onFinalResult = { text ->
+                    onFinalResult = {
+                        text ->
 
                         handleFallbackUserSpeech(
                             text
                         )
                     },
 
-                    onError = { message ->
+                    onError = {
+                        message ->
 
-                        log(message)
+                        log(
+                            message
+                        )
 
                         if (
                             inFallbackMode &&
@@ -1177,7 +1488,8 @@ class JarvisService : Service() {
                         }
                     },
 
-                    onListeningStateChanged = { listening ->
+                    onListeningStateChanged = {
+                        listening ->
 
                         if (listening) {
 
@@ -1192,6 +1504,7 @@ class JarvisService : Service() {
         }
 
         if (!isPaused) {
+
             startFallbackListening()
         }
     }
@@ -1202,7 +1515,8 @@ class JarvisService : Service() {
             return
         }
 
-        inFallbackMode = false
+        inFallbackMode =
+            false
 
         fallbackSpeech?.stop()
 
@@ -1220,7 +1534,8 @@ class JarvisService : Service() {
             !isPaused
         ) {
 
-            fallbackSpeech?.startListening()
+            fallbackSpeech
+                ?.startListening()
         }
     }
 
@@ -1229,7 +1544,9 @@ class JarvisService : Service() {
     ) {
 
         val cleaned =
-            normalizeTranscript(text)
+            normalizeTranscript(
+                text
+            )
 
         if (cleaned.isBlank()) {
             return
@@ -1258,12 +1575,15 @@ class JarvisService : Service() {
             userText =
                 cleaned,
 
-            onResult = { reply ->
+            onResult = {
+                reply ->
 
                 handler.post {
 
                     val cleanReply =
-                        normalizeTranscript(reply)
+                        normalizeTranscript(
+                            reply
+                        )
 
                     log(
                         "Jarvis: $cleanReply"
@@ -1274,17 +1594,21 @@ class JarvisService : Service() {
                         cleanReply
                     )
 
-                    fallbackTts?.speak(
-                        cleanReply
-                    )
+                    fallbackTts
+                        ?.speak(
+                            cleanReply
+                        )
                 }
             },
 
-            onError = { error ->
+            onError = {
+                error ->
 
                 handler.post {
 
-                    log(error)
+                    log(
+                        error
+                    )
 
                     pushState(
                         JarvisState.ERROR,
@@ -1317,6 +1641,7 @@ class JarvisService : Service() {
             isPaused ||
             inFallbackMode
         ) {
+
             return
         }
 
@@ -1324,6 +1649,11 @@ class JarvisService : Service() {
             level * 3f
         )
 
+        /*
+         * This is UI state only.
+         *
+         * It does NOT gate microphone transmission.
+         */
         if (
             level > ampThreshold &&
             audioEngine.micSendEnabled
@@ -1331,7 +1661,8 @@ class JarvisService : Service() {
 
             if (!voiceActive) {
 
-                voiceActive = true
+                voiceActive =
+                    true
 
                 pushState(
                     JarvisState.HEARING,
@@ -1341,13 +1672,17 @@ class JarvisService : Service() {
             }
 
             silenceRunnable?.let {
-                handler.removeCallbacks(it)
+
+                handler.removeCallbacks(
+                    it
+                )
             }
 
             silenceRunnable =
                 Runnable {
 
-                    voiceActive = false
+                    voiceActive =
+                        false
 
                     if (!isPaused) {
 
@@ -1374,7 +1709,8 @@ class JarvisService : Service() {
             !inFallbackMode
         ) {
 
-            audioEngine.micSendEnabled = true
+            audioEngine.micSendEnabled =
+                true
 
             pushState(
                 JarvisState.LISTENING,
@@ -1386,7 +1722,8 @@ class JarvisService : Service() {
 
     fun toggleMute() {
 
-        isPaused = !isPaused
+        isPaused =
+            !isPaused
 
         if (isPaused) {
 
@@ -1398,7 +1735,11 @@ class JarvisService : Service() {
 
             } else {
 
-                audioEngine.micSendEnabled = false
+                /*
+                 * User explicitly paused the assistant.
+                 */
+                audioEngine.micSendEnabled =
+                    false
 
                 audioEngine.clearPlaybackQueue()
             }
@@ -1417,7 +1758,11 @@ class JarvisService : Service() {
 
             } else {
 
-                audioEngine.micSendEnabled = true
+                /*
+                 * Resume realtime microphone.
+                 */
+                audioEngine.micSendEnabled =
+                    true
             }
 
             pushState(
@@ -1431,7 +1776,7 @@ class JarvisService : Service() {
     /*
      * Public interruption method.
      *
-     * UI/wake-word layer will use this later.
+     * UI/wake-word layer can use this later.
      */
     fun interruptSpeaking() {
 
@@ -1441,9 +1786,11 @@ class JarvisService : Service() {
 
         audioEngine.clearPlaybackQueue()
 
-        audioEngine.micSendEnabled = true
+        audioEngine.micSendEnabled =
+            true
 
-        noMoreAudioIncoming = true
+        noMoreAudioIncoming =
+            true
 
         pushState(
             JarvisState.LISTENING,
@@ -1458,9 +1805,14 @@ class JarvisService : Service() {
         sub: String
     ) {
 
-        currentState = state
-        currentLabel = label
-        currentSub = sub
+        currentState =
+            state
+
+        currentLabel =
+            label
+
+        currentSub =
+            sub
 
         listener?.onState(
             state,
@@ -1500,10 +1852,14 @@ class JarvisService : Service() {
     }
 
     fun getLastConversation():
-            Pair<String?, String?> =
-        lastUserText to lastJarvisText
+        Pair<String?, String?> =
 
-    fun getLogSnapshot(): String =
+        lastUserText to
+            lastJarvisText
+
+    fun getLogSnapshot():
+        String =
+
         logBuffer.toString()
 
     private fun log(
@@ -1519,19 +1875,18 @@ class JarvisService : Service() {
         )
     }
 
-    /**
-     * Mark the latest response as accepted/rejected.
-     *
-     * These methods will later be called by the History /
-     * conversation feedback UI.
-     */
-    fun markLatestResponseAccepted(accepted: Boolean) {
+    fun markLatestResponseAccepted(
+        accepted: Boolean
+    ) {
 
-        firebaseResponseAccepted = accepted
+        firebaseResponseAccepted =
+            accepted
 
         FirebaseManager.updateTurnQuality(
-            turnId = firebaseCurrentTurnId,
-            responseAccepted = accepted
+            turnId =
+                firebaseCurrentTurnId,
+            responseAccepted =
+                accepted
         )
     }
 
@@ -1539,7 +1894,8 @@ class JarvisService : Service() {
         correctionType: String
     ) {
 
-        firebaseUserCorrected = true
+        firebaseUserCorrected =
+            true
 
         firebaseCorrectionType =
             correctionType
@@ -1550,9 +1906,12 @@ class JarvisService : Service() {
                 }
 
         FirebaseManager.updateTurnQuality(
-            turnId = firebaseCurrentTurnId,
-            userCorrected = true,
-            correctionType = firebaseCorrectionType
+            turnId =
+                firebaseCurrentTurnId,
+            userCorrected =
+                true,
+            correctionType =
+                firebaseCorrectionType
         )
     }
 
@@ -1561,26 +1920,29 @@ class JarvisService : Service() {
     ) {
 
         firebaseQualityScore =
-            score.coerceIn(1, 5)
+            score.coerceIn(
+                1,
+                5
+            )
 
         FirebaseManager.updateTurnQuality(
-            turnId = firebaseCurrentTurnId,
-            qualityScore = firebaseQualityScore
+            turnId =
+                firebaseCurrentTurnId,
+            qualityScore =
+                firebaseQualityScore
         )
     }
 
-    /**
-     * Record explicit feedback immediately.
-     *
-     * This is separate from the completed turn itself.
-     */
     fun submitFeedback(
         rating: Int,
         comment: String? = null
     ) {
+
         FirebaseManager.recordFeedback(
-            rating = rating,
-            comment = comment
+            rating =
+                rating,
+            comment =
+                comment
         )
     }
 
@@ -1598,7 +1960,9 @@ class JarvisService : Service() {
                     NotificationManager.IMPORTANCE_LOW
                 )
 
-            channel.setShowBadge(false)
+            channel.setShowBadge(
+                false
+            )
 
             val manager =
                 getSystemService(
@@ -1646,7 +2010,9 @@ class JarvisService : Service() {
             .setContentIntent(
                 pendingIntent
             )
-            .setOngoing(true)
+            .setOngoing(
+                true
+            )
             .setPriority(
                 NotificationCompat.PRIORITY_LOW
             )
@@ -1680,8 +2046,11 @@ class JarvisService : Service() {
 
         FirebasePerformanceManager.close()
 
-        geminiPerformanceTraceId = null
-        voicePerformanceTraceId = null
+        geminiPerformanceTraceId =
+            null
+
+        voicePerformanceTraceId =
+            null
 
         geminiClient?.disconnect()
 
@@ -1694,8 +2063,42 @@ class JarvisService : Service() {
         wakeLock?.let {
 
             if (it.isHeld) {
+
                 it.release()
             }
+        }
+    }
+}
+
+/*
+ * Small local compatibility helpers.
+ *
+ * They keep the main service readable and avoid changing
+ * your existing Firebase / JSON architecture.
+ */
+private object SystemClockCompat {
+
+    fun elapsedRealtime(): Long =
+        android.os.SystemClock.elapsedRealtime()
+}
+
+private object JSONObjectCompat {
+
+    fun error(
+        message: String?
+    ): org.json.JSONObject {
+
+        return org.json.JSONObject().apply {
+
+            put(
+                "success",
+                false
+            )
+
+            put(
+                "error",
+                message ?: "Unknown tool error"
+            )
         }
     }
 }
