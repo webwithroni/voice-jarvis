@@ -56,9 +56,14 @@ object RecoveryPolicy {
     }
 
     /**
-     * Produce the alternate request for a safe retry.
+     * Produce the retry request for a safe recovery.
      *
-     * scroll → swipe
+     * Scroll recovery preserves the semantic scroll action
+     * and all original parameters.
+     *
+     * The executor itself owns the internal fallback strategy
+     * between semantic accessibility scrolling and a vertical
+     * gesture.
      */
     fun recoverRequest(
         request: ActionRequest
@@ -72,7 +77,7 @@ object RecoveryPolicy {
 
             "scroll" ->
                 request.copy(
-                    action = "swipe"
+                    action = "scroll"
                 )
 
             else ->

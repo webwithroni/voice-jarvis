@@ -748,6 +748,7 @@ class ActionExecutor(
         val direction =
             when (
                 request.parameters["direction"]
+                    ?.trim()
                     ?.lowercase()
             ) {
 
@@ -757,13 +758,15 @@ class ActionExecutor(
                 "down" ->
                     ScreenController.Direction.DOWN
 
-                /*
-                 * scroll is strictly vertical.
-                 *
-                 * Horizontal movement belongs to swipe().
-                 */
                 else ->
-                    ScreenController.Direction.DOWN
+                    return ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            request.action,
+                        message =
+                            "scroll requires a valid vertical direction: 'up' or 'down'."
+                    )
             }
 
         val result =
