@@ -481,7 +481,7 @@ class VoiceJarvisAccessibilityService :
     }
 
     private fun resolveFreshNode(
-        descriptor: ScreenElement
+        descriptor: ScreenController.ScreenElement
     ): AccessibilityNodeInfo? {
 
         val candidates =
@@ -565,7 +565,7 @@ class VoiceJarvisAccessibilityService :
 
     private fun sameEnough(
         node: AccessibilityNodeInfo,
-        descriptor: ScreenElement,
+        descriptor: ScreenController.ScreenElement,
         tolerance: Int = 180
     ): Boolean {
 
