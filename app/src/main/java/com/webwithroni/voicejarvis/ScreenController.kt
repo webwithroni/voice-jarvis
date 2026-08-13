@@ -910,34 +910,20 @@ class ScreenController(
                 Direction.DOWN ->
                     setOf(
                         AccessibilityNodeInfo
-                            .ACTION_SCROLL_DOWN,
-                        AccessibilityNodeInfo
                             .ACTION_SCROLL_FORWARD
                     )
 
                 Direction.UP ->
                     setOf(
                         AccessibilityNodeInfo
-                            .ACTION_SCROLL_UP,
-                        AccessibilityNodeInfo
                             .ACTION_SCROLL_BACKWARD
                     )
 
                 Direction.LEFT ->
-                    setOf(
-                        AccessibilityNodeInfo
-                            .ACTION_SCROLL_LEFT,
-                        AccessibilityNodeInfo
-                            .ACTION_SCROLL_BACKWARD
-                    )
+                    emptySet()
 
                 Direction.RIGHT ->
-                    setOf(
-                        AccessibilityNodeInfo
-                            .ACTION_SCROLL_RIGHT,
-                        AccessibilityNodeInfo
-                            .ACTION_SCROLL_FORWARD
-                    )
+                    emptySet()
             }
 
         val supported =
@@ -999,31 +985,20 @@ class ScreenController(
                 Direction.DOWN ->
                     listOf(
                         AccessibilityNodeInfo
-                            .ACTION_SCROLL_DOWN,
-                        AccessibilityNodeInfo
                             .ACTION_SCROLL_FORWARD
                     )
 
                 Direction.UP ->
                     listOf(
                         AccessibilityNodeInfo
-                            .ACTION_SCROLL_UP,
-                        AccessibilityNodeInfo
                             .ACTION_SCROLL_BACKWARD
                     )
 
                 Direction.LEFT ->
-                    listOf(
-                        AccessibilityNodeInfo
-                            .ACTION_SCROLL_LEFT,
-                        AccessibilityNodeInfo
-                            .ACTION_SCROLL_BACKWARD
-                    )
+                    emptyList()
 
                 Direction.RIGHT ->
                     listOf(
-                        AccessibilityNodeInfo
-                            .ACTION_SCROLL_RIGHT,
                         AccessibilityNodeInfo
                             .ACTION_SCROLL_FORWARD
                     )

@@ -21,16 +21,6 @@ import android.view.accessibility.AccessibilityNodeInfo
 class VoiceJarvisAccessibilityService :
     AccessibilityService() {
 
-    data class ScreenElement(
-        val id: Int,
-        val text: String,
-        val contentDescription: String,
-        val className: String,
-        val clickable: Boolean,
-        val editable: Boolean,
-        val bounds: Rect
-    )
-
     companion object {
 
         @Volatile
@@ -58,7 +48,7 @@ class VoiceJarvisAccessibilityService :
         ScreenController
 
     private var lastElements:
-        List<ScreenElement> =
+        List<ScreenController.ScreenElement> =
         emptyList()
 
     override fun onServiceConnected() {
@@ -105,23 +95,6 @@ class VoiceJarvisAccessibilityService :
 
         lastElements =
             collected
-                .mapIndexed { index, element ->
-
-                    ScreenElement(
-                        id = index,
-                        text = element.text,
-                        contentDescription =
-                            element.contentDescription,
-                        className =
-                            element.className,
-                        clickable =
-                            element.clickable,
-                        editable =
-                            element.editable,
-                        bounds =
-                            Rect(element.bounds)
-                    )
-                }
 
         val sb =
             StringBuilder()
