@@ -25,6 +25,10 @@
         android:allowBackup="true">
 
         <activity
+            android:name=".JarvisScreensActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>

@@ -182,10 +182,25 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         }
 
         findViewById<View>(R.id.settingsButton).setOnClickListener {
-            Toast.makeText(this, "Settings — coming soon", Toast.LENGTH_SHORT).show()
+            startActivity(
+                Intent(this, JarvisScreensActivity::class.java).apply {
+                    putExtra(
+                        JarvisScreensActivity.ROUTE,
+                        JarvisScreensActivity.SETTINGS
+                    )
+                }
+            )
         }
+
         findViewById<View>(R.id.historyButton).setOnClickListener {
-            Toast.makeText(this, "History — coming soon", Toast.LENGTH_SHORT).show()
+            startActivity(
+                Intent(this, JarvisScreensActivity::class.java).apply {
+                    putExtra(
+                        JarvisScreensActivity.ROUTE,
+                        JarvisScreensActivity.HISTORY
+                    )
+                }
+            )
         }
         findViewById<View>(R.id.jarvisBrand).setOnLongClickListener {
             debugVisible = !debugVisible
