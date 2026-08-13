@@ -1,4 +1,9 @@
 package com.webwithroni.voicejarvis
+import android.view.KeyEvent
+import android.provider.AlarmClock
+import android.os.BatteryManager
+import android.media.AudioManager
+import android.hardware.camera2.CameraManager
 
 import android.content.Context
 import android.content.Intent
@@ -121,6 +126,31 @@ class ActionExecutor(
                     request
                 )
 
+            "get_battery" ->
+                getBattery(
+                    request
+                )
+
+            "toggle_flashlight" ->
+                toggleFlashlight(
+                    request
+                )
+
+            "set_volume" ->
+                setVolume(
+                    request
+                )
+
+            "set_alarm" ->
+                setAlarm(
+                    request
+                )
+
+            "set_timer" ->
+                setTimer(
+                    request
+                )
+
             else ->
                 ActionResult(
                     status =
@@ -130,6 +160,428 @@ class ActionExecutor(
                     message =
                         "Unsupported action: ${request.action}"
                 )
+        }
+    }
+
+    private fun getBattery(
+        request: ActionRequest
+    ): ActionResult {
+
+        return try {
+
+            val batteryManager =
+                context.getSystemService(
+                    Context.BATTERY_SERVICE
+                ) as BatteryManager
+
+            val level =
+                batteryManager.getIntProperty(
+                    BatteryManager.BATTERY_PROPERTY_CAPACITY
+                )
+
+            val charging =
+                batteryManager.isCharging
+
+            ActionResult(
+                status =
+                    ActionStatus.EXECUTED,
+                action =
+                    request.action,
+                message =
+                    "Battery is at $level percent, ${
+                        if (charging) {
+                            "charging"
+                        } else {
+                            "not charging"
+                        }
+                    }.",
+                verified = true,
+                data =
+                    mapOf(
+                        "level" to
+                            level.toString(),
+                        "charging" to
+                            charging.toString()
+                    )
+            )
+
+        } catch (e: Exception) {
+
+            ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Unable to read battery status: ${e.message}"
+            )
+        }
+    }
+
+    private fun toggleFlashlight(
+        request: ActionRequest
+    ): ActionResult {
+
+        val enabled =
+            request.parameters["on"]
+                ?.trim()
+                ?.lowercase()
+                ?.let {
+                    it == "true" ||
+                        it == "on" ||
+                        it == "1"
+                }
+
+        if (enabled == null) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Flashlight state is required."
+            )
+        }
+
+        return try {
+
+            val cameraManager =
+                context.getSystemService(
+                    Context.CAMERA_SERVICE
+                ) as CameraManager
+
+            val cameraId =
+                cameraManager.cameraIdList
+                    .firstOrNull()
+
+            if (cameraId == null) {
+
+                ActionResult(
+                    status =
+                        ActionStatus.UNAVAILABLE,
+                    action =
+                        request.action,
+                    message =
+                        "No camera with flashlight was found."
+                )
+
+            } else {
+
+                cameraManager.setTorchMode(
+                    cameraId,
+                    enabled
+                )
+
+                ActionResult(
+                    status =
+                        ActionStatus.VERIFIED,
+                    action =
+                        request.action,
+                    message =
+                        if (enabled) {
+                            "Flashlight on."
+                        } else {
+                            "Flashlight off."
+                        },
+                    verified = true,
+                    data =
+                        mapOf(
+                            "on" to
+                                enabled.toString()
+                        )
+                )
+            }
+
+        } catch (e: SecurityException) {
+
+            ActionResult(
+                status =
+                    ActionStatus.UNAVAILABLE,
+                action =
+                    request.action,
+                message =
+                    "Camera permission is required for flashlight control."
+            )
+
+        } catch (e: Exception) {
+
+            ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Unable to control flashlight: ${e.message}"
+            )
+        }
+    }
+
+    private fun setVolume(
+        request: ActionRequest
+    ): ActionResult {
+
+        val percent =
+            request.parameters["percent"]
+                ?.toIntOrNull()
+
+        if (percent == null) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Volume percentage is required."
+            )
+        }
+
+        val normalized =
+            percent.coerceIn(
+                0,
+                100
+            )
+
+        return try {
+
+            val audioManager =
+                context.getSystemService(
+                    Context.AUDIO_SERVICE
+                ) as AudioManager
+
+            val max =
+                audioManager.getStreamMaxVolume(
+                    AudioManager.STREAM_MUSIC
+                )
+
+            val target =
+                ((normalized / 100f) * max)
+                    .toInt()
+                    .coerceIn(
+                        0,
+                        max
+                    )
+
+            audioManager.setStreamVolume(
+                AudioManager.STREAM_MUSIC,
+                target,
+                0
+            )
+
+            ActionResult(
+                status =
+                    ActionStatus.VERIFIED,
+                action =
+                    request.action,
+                message =
+                    "Volume set to $normalized percent.",
+                verified = true,
+                data =
+                    mapOf(
+                        "percent" to
+                            normalized.toString()
+                    )
+            )
+
+        } catch (e: Exception) {
+
+            ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Unable to set volume: ${e.message}"
+            )
+        }
+    }
+
+    private fun setAlarm(
+        request: ActionRequest
+    ): ActionResult {
+
+        val hour =
+            request.parameters["hour"]
+                ?.toIntOrNull()
+
+        val minute =
+            request.parameters["minute"]
+                ?.toIntOrNull()
+
+        val label =
+            request.parameters["label"]
+                ?.trim()
+                .orEmpty()
+
+        if (
+            hour == null ||
+            minute == null ||
+            hour !in 0..23 ||
+            minute !in 0..59
+        ) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Valid alarm hour and minute are required."
+            )
+        }
+
+        return try {
+
+            val intent =
+                Intent(
+                    AlarmClock.ACTION_SET_ALARM
+                ).apply {
+
+                    putExtra(
+                        AlarmClock.EXTRA_HOUR,
+                        hour
+                    )
+
+                    putExtra(
+                        AlarmClock.EXTRA_MINUTES,
+                        minute
+                    )
+
+                    if (
+                        label.isNotBlank()
+                    ) {
+                        putExtra(
+                            AlarmClock.EXTRA_MESSAGE,
+                            label
+                        )
+                    }
+
+                    flags =
+                        Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+
+            context.startActivity(
+                intent
+            )
+
+            ActionResult(
+                status =
+                    ActionStatus.EXECUTED,
+                action =
+                    request.action,
+                message =
+                    "Alarm set for ${
+                        hour.toString()
+                            .padStart(
+                                2,
+                                '0'
+                            )
+                    }:${
+                        minute.toString()
+                            .padStart(
+                                2,
+                                '0'
+                            )
+                    }.",
+                verified = false
+            )
+
+        } catch (e: Exception) {
+
+            ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Unable to set alarm: ${e.message}"
+            )
+        }
+    }
+
+    private fun setTimer(
+        request: ActionRequest
+    ): ActionResult {
+
+        val seconds =
+            request.parameters["seconds"]
+                ?.toLongOrNull()
+
+        val label =
+            request.parameters["label"]
+                ?.trim()
+                .orEmpty()
+
+        if (
+            seconds == null ||
+            seconds <= 0L
+        ) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Timer duration must be greater than zero."
+            )
+        }
+
+        return try {
+
+            val intent =
+                Intent(
+                    AlarmClock.ACTION_SET_TIMER
+                ).apply {
+
+                    putExtra(
+                        AlarmClock.EXTRA_LENGTH,
+                        seconds.toInt()
+                    )
+
+                    if (
+                        label.isNotBlank()
+                    ) {
+                        putExtra(
+                            AlarmClock.EXTRA_MESSAGE,
+                            label
+                        )
+                    }
+
+                    putExtra(
+                        AlarmClock.EXTRA_SKIP_UI,
+                        true
+                    )
+
+                    flags =
+                        Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+
+            context.startActivity(
+                intent
+            )
+
+            ActionResult(
+                status =
+                    ActionStatus.EXECUTED,
+                action =
+                    request.action,
+                message =
+                    "Timer set for $seconds seconds.",
+                verified = false
+            )
+
+        } catch (e: Exception) {
+
+            ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Unable to set timer: ${e.message}"
+            )
         }
     }
 

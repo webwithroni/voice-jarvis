@@ -52,6 +52,18 @@ class CapabilityManager(
         const val MEDIA =
             "media"
 
+        const val DEVICE_CONTROL =
+            "device_control"
+
+        const val ALARM_TIMER =
+            "alarm_timer"
+
+        const val FLASHLIGHT =
+            "flashlight"
+
+        const val VOLUME =
+            "volume"
+
         const val APP_CONTROL =
             "app_control"
 
@@ -283,6 +295,10 @@ class CapabilityManager(
             get(FILES),
             get(CAMERA),
             get(MEDIA),
+            get(DEVICE_CONTROL),
+            get(ALARM_TIMER),
+            get(FLASHLIGHT),
+            get(VOLUME),
             get(APP_CONTROL),
             get(WEB_CONTROL),
             get(PAYMENT)
@@ -354,7 +370,19 @@ class CapabilityManager(
             "media_control" ->
                 MEDIA
 
-            "get_battery",
+            "get_battery" ->
+                DEVICE_CONTROL
+
+            "toggle_flashlight" ->
+                FLASHLIGHT
+
+            "set_volume" ->
+                VOLUME
+
+            "set_alarm",
+            "set_timer" ->
+                ALARM_TIMER
+
             "get_device_info" ->
                 APP_CONTROL
 

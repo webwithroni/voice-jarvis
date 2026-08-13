@@ -36,8 +36,7 @@ object RiskEngine {
             "back",
             "home",
             "recents",
-            "get_battery",
-            "get_device_info" ->
+            "get_battery" ->
                 ActionRisk.SAFE
 
             /*
@@ -48,7 +47,11 @@ object RiskEngine {
             "launch_app",
             "open_app",
             "media_control",
-            "type" ->
+            "type",
+            "toggle_flashlight",
+            "set_volume",
+            "set_alarm",
+            "set_timer" ->
                 ActionRisk.LOW
 
             /*

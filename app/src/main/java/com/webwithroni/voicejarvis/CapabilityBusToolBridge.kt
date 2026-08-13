@@ -54,7 +54,12 @@ class CapabilityBusToolBridge(
             "scroll_screen",
             "tap_element",
             "go_back",
-            "go_home" ->
+            "go_home",
+            "get_battery",
+            "toggle_flashlight",
+            "set_volume",
+            "set_alarm",
+            "set_timer" ->
                 true
 
             else ->
@@ -236,6 +241,157 @@ class CapabilityBusToolBridge(
                 bus.executeSafe(
                     action = "home"
                 )
+            }
+
+            "get_battery" -> {
+
+                bus.executeSafe(
+                    action = "get_battery"
+                )
+            }
+
+            "toggle_flashlight" -> {
+
+                val enabled =
+                    args.optBoolean(
+                        "on",
+                        false
+                    )
+
+                bus.executeSafe(
+                    action = "toggle_flashlight",
+                    parameters =
+                        mapOf(
+                            "on" to
+                                enabled.toString()
+                        )
+                )
+            }
+
+            "set_volume" -> {
+
+                val percent =
+                    args.optInt(
+                        "percent",
+                        -1
+                    )
+
+                if (
+                    percent !in 0..100
+                ) {
+
+                    ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            "set_volume",
+                        message =
+                            "Volume must be between 0 and 100 percent."
+                    )
+
+                } else {
+
+                    bus.executeSafe(
+                        action = "set_volume",
+                        parameters =
+                            mapOf(
+                                "percent" to
+                                    percent.toString()
+                            )
+                    )
+                }
+            }
+
+            "set_alarm" -> {
+
+                val hour =
+                    args.optInt(
+                        "hour",
+                        -1
+                    )
+
+                val minute =
+                    args.optInt(
+                        "minute",
+                        -1
+                    )
+
+                val label =
+                    args.optString(
+                        "label"
+                    )
+
+                if (
+                    hour !in 0..23 ||
+                    minute !in 0..59
+                ) {
+
+                    ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            "set_alarm",
+                        message =
+                            "Alarm hour must be 0-23 and minute must be 0-59."
+                    )
+
+                } else {
+
+                    bus.executeSafe(
+                        action = "set_alarm",
+                        parameters =
+                            mapOf(
+                                "hour" to
+                                    hour.toString(),
+                                "minute" to
+                                    minute.toString(),
+                                "label" to
+                                    label
+                            )
+                    )
+                }
+            }
+
+            "set_timer" -> {
+
+                val seconds =
+                    args.optLong(
+                        "seconds",
+                        -1L
+                    )
+
+                val label =
+                    args.optString(
+                        "label"
+                    )
+
+                if (
+                    seconds <= 0L ||
+                    seconds > Int.MAX_VALUE.toLong()
+                ) {
+
+                    ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            "set_timer",
+                        message =
+                            "Timer duration must be greater than zero."
+                    )
+
+                } else {
+
+                    bus.executeSafe(
+                        action = "set_timer",
+                        parameters =
+                            mapOf(
+                                "seconds" to
+                                    seconds.toString(),
+                                "label" to
+                                    label
+                            )
+                    )
+                }
             }
 
             else -> {
