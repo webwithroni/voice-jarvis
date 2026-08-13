@@ -1375,7 +1375,7 @@ class JarvisScreensActivity : AppCompatActivity() {
         val replay =
             TextView(this).apply {
 
-                text =
+                this.text =
                     "  ▶  Replay response"
 
                 textSize =
