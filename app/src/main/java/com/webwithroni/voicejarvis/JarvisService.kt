@@ -1,5 +1,8 @@
 package com.webwithroni.voicejarvis
 
+import android.media.AudioManager
+import android.media.AudioFocusRequest
+import android.media.AudioAttributes
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -18,6 +21,27 @@ import java.util.Date
 import java.util.Locale
 
 class JarvisService : Service() {
+
+    /*
+     * Android conversational audio session.
+     *
+     * Jarvis is both:
+     *
+     * - microphone input
+     * - realtime speech output
+     *
+     * Keep the audio mode/focus lifecycle explicit so the
+     * Android audio system knows this is a communication session.
+     */
+    private var jarvisAudioFocusRequest:
+        AudioFocusRequest? = null
+
+    private var jarvisPreviousAudioMode:
+        Int? = null
+
+    private var jarvisAudioFocusOwned =
+        false
+
 
     interface UiListener {
 
@@ -320,6 +344,9 @@ class JarvisService : Service() {
                                             "Restarting microphone capture."
                                         )
 
+                                        acquireJarvisAudioSession()
+
+
                                         audioEngine.startRecording()
                                     }
 
@@ -343,6 +370,162 @@ class JarvisService : Service() {
 
         connectGemini()
     }
+
+
+    /**
+     * Acquire Android audio focus and communication mode for
+     * the active Jarvis voice session.
+     *
+     * Idempotent:
+     * calling this repeatedly does not create multiple
+     * focus requests.
+     */
+    private fun acquireJarvisAudioSession() {
+
+        if (jarvisAudioFocusOwned) {
+            return
+        }
+
+        val audioManager =
+            getSystemService(
+                AUDIO_SERVICE
+            ) as AudioManager
+
+        jarvisPreviousAudioMode =
+            audioManager.mode
+
+        val attributes =
+            AudioAttributes.Builder()
+                .setUsage(
+                    AudioAttributes.USAGE_ASSISTANT
+                )
+                .setContentType(
+                    AudioAttributes.CONTENT_TYPE_SPEECH
+                )
+                .build()
+
+        val focusRequest =
+            AudioFocusRequest.Builder(
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE
+            )
+                .setAudioAttributes(
+                    attributes
+                )
+                .setAcceptsDelayedFocusGain(
+                    false
+                )
+                .setOnAudioFocusChangeListener { change ->
+
+                    log(
+                        "Jarvis audio focus changed: $change"
+                    )
+                }
+                .build()
+
+        val result =
+            audioManager.requestAudioFocus(
+                focusRequest
+            )
+
+        if (
+            result ==
+            AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        ) {
+
+            jarvisAudioFocusRequest =
+                focusRequest
+
+            /*
+             * MODE_IN_COMMUNICATION is the Android audio mode
+             * intended for realtime two-way communication.
+             */
+            audioManager.mode =
+                AudioManager.MODE_IN_COMMUNICATION
+
+            jarvisAudioFocusOwned =
+                true
+
+            log(
+                "Jarvis audio session acquired."
+            )
+
+        } else {
+
+            jarvisAudioFocusRequest =
+                null
+
+            jarvisAudioFocusOwned =
+                false
+
+            log(
+                "Jarvis audio focus request was not granted."
+            )
+        }
+    }
+
+
+    /**
+     * Release Jarvis's Android audio session.
+     *
+     * Restores the audio mode that existed before Jarvis
+     * acquired the communication session.
+     */
+    private fun releaseJarvisAudioSession() {
+
+        if (!jarvisAudioFocusOwned) {
+            return
+        }
+
+        val audioManager =
+            getSystemService(
+                AUDIO_SERVICE
+            ) as AudioManager
+
+        try {
+
+            jarvisAudioFocusRequest?.let {
+
+                audioManager.abandonAudioFocusRequest(
+                    it
+                )
+            }
+
+        } catch (e: Exception) {
+
+            log(
+                "Audio focus release failed: ${e.message}"
+            )
+        }
+
+        jarvisAudioFocusRequest =
+            null
+
+        jarvisAudioFocusOwned =
+            false
+
+        jarvisPreviousAudioMode?.let {
+
+            try {
+
+                audioManager.mode =
+                    it
+
+            } catch (e: Exception) {
+
+                log(
+                    "Audio mode restore failed: ${e.message}"
+                )
+            }
+        }
+
+        jarvisPreviousAudioMode =
+            null
+
+        log(
+            "Jarvis audio session released."
+        )
+    }
+
 
     override fun onStartCommand(
         intent: Intent?,
@@ -532,6 +715,9 @@ class JarvisService : Service() {
                             0
 
                         exitFallbackMode()
+
+                        acquireJarvisAudioSession()
+
 
                         audioEngine.startRecording()
 
@@ -1703,14 +1889,18 @@ class JarvisService : Service() {
 
     private fun handlePlaybackIdle() {
 
+        /*
+         * Microphone remains continuously active in V2.
+         *
+         * Playback becoming idle changes the UI state only.
+         * It does not control microphone transport.
+         */
+
         if (
             noMoreAudioIncoming &&
             !isPaused &&
             !inFallbackMode
         ) {
-
-            audioEngine.micSendEnabled =
-                true
 
             pushState(
                 JarvisState.LISTENING,
@@ -1738,8 +1928,6 @@ class JarvisService : Service() {
                 /*
                  * User explicitly paused the assistant.
                  */
-                audioEngine.micSendEnabled =
-                    false
 
                 audioEngine.clearPlaybackQueue()
             }
@@ -2067,6 +2255,9 @@ class JarvisService : Service() {
                 it.release()
             }
         }
+
+
+        releaseJarvisAudioSession()
     }
 }
 
