@@ -5,6 +5,8 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import java.time.LocalDate
+import java.util.concurrent.Executors
 
 /**
  * Voice Jarvis research pipeline.
@@ -106,7 +108,7 @@ object ResearchRouter {
         return try {
 
             val rawSources =
-                searchTavily(
+                searchResearchSources(
                     cleanQuery
                 )
 
@@ -193,6 +195,107 @@ object ResearchRouter {
                 "Research failed: ${e.message}"
             )
         }
+    }
+
+    private fun searchResearchSources(
+        query: String
+    ): JSONArray {
+
+        val queries =
+            buildResearchQueries(query)
+
+        /*
+         * Research queries are independent, so run them
+         * concurrently. This keeps deep research latency
+         * bounded instead of waiting for every search
+         * sequentially.
+         */
+        val executor =
+            Executors.newFixedThreadPool(
+                minOf(
+                    3,
+                    queries.size
+                )
+            )
+
+        return try {
+
+            val futures =
+                queries.map { researchQuery ->
+
+                    executor.submit<JSONArray> {
+                        searchTavily(
+                            researchQuery
+                        )
+                    }
+                }
+
+            val merged =
+                JSONArray()
+
+            futures.forEach { future ->
+
+                try {
+
+                    val results =
+                        future.get()
+
+                    for (
+                        i in 0 until results.length()
+                    ) {
+
+                        results
+                            .optJSONObject(i)
+                            ?.let {
+                                merged.put(it)
+                            }
+                    }
+
+                } catch (_: Exception) {
+                    /*
+                     * One search failing should not kill
+                     * the entire research request.
+                     */
+                }
+            }
+
+            merged
+
+        } finally {
+
+            executor.shutdownNow()
+        }
+    }
+
+    private fun buildResearchQueries(
+        query: String
+    ): List<String> {
+
+        val lower =
+            query.lowercase(Locale.US)
+
+        val news =
+            isNewsQuery(query)
+
+        if (!news) {
+            return listOf(
+                query
+            )
+        }
+
+        val date =
+            LocalDate.now()
+
+        val monthYear =
+            "${date.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${date.year}"
+
+        return listOf(
+            query,
+
+            "$query concrete company announcements model launches products ${monthYear}",
+
+            "$query AI regulation safety research startups breakthroughs ${monthYear}"
+        ).distinct()
     }
 
     private fun normalizeQuery(
@@ -699,19 +802,30 @@ object ResearchRouter {
 
             HARD RULES:
 
-            1. Use only information supported by the
+            1. Use ONLY information supported by the
                supplied sources.
 
-            2. Prefer the most recent and authoritative
-               sources when sources disagree.
+            2. Never invent dates, numbers, quotes,
+               organizations, products, launches or events.
 
-            3. Never invent dates, numbers, quotes,
-               product names, events or claims.
+            3. Prefer the newest and most authoritative
+               evidence when sources disagree.
 
-            4. Explicitly state uncertainty when evidence
-               is weak or contradictory.
+            4. Do NOT turn a collection of stories into a
+               generic trend paragraph.
 
-            5. Produce exactly valid JSON with these fields:
+            5. Every concrete news item MUST contain:
+               - a named organization, person or product
+               - a specific event/development
+               - a source reference such as [1] or [2]
+
+            6. If a claim cannot be tied to a specific
+               supplied source, omit it.
+
+            7. If several sources describe the same story,
+               merge them into ONE story instead of repeating it.
+
+            8. Produce exactly valid JSON:
 
                {
                  "voiceAnswer": "...",
@@ -719,31 +833,49 @@ object ResearchRouter {
                  "confidence": "high|medium|low"
                }
 
-            6. voiceAnswer:
+            9. voiceAnswer:
                - natural spoken answer
-               - concise
-               - maximum about 5 short sentences
+               - maximum 6 short sentences
+               - start directly with the answer
+               - mention the most important named stories
                - no URLs
                - no markdown table
 
-            7. detailedAnswer:
-               - 3 to 5 concrete developments
-               - explain what happened
-               - explain why it matters
-               - identify the relevant organization/topic
-               - include source numbers like [1], [2]
-               - finish with a short overall takeaway
+            10. detailedAnswer:
+                - 3 to 5 numbered concrete developments
+                - each item must identify WHAT happened
+                - each item must identify WHO/WHAT is involved
+                - explain WHY it matters
+                - include supported dates when available
+                - include source references [1], [2], etc.
+                - end with an overall takeaway
 
-            8. For news:
-               - prefer concrete stories over vague trends
-               - include dates when supported by sources
-               - prioritize recent developments
+            11. For latest/news questions:
+                - prioritize developments from the requested
+                  time period
+                - prefer concrete announcements, launches,
+                  policy actions, research results and funding
+                - avoid vague statements like
+                  "AI investment is increasing" unless a
+                  specific source-backed investment is named
 
-            9. If only weak evidence exists:
-               confidence = "low"
+            12. If fewer than 3 concrete stories are supported,
+                return only the stories that are actually supported.
+
+            13. If evidence is weak or contradictory:
+                confidence = "low" or "medium"
+
+            14. If the sources strongly agree on multiple
+                concrete stories:
+                confidence = "high"
 
             USER QUESTION:
             $query
+
+            RETRIEVAL NOTE:
+            Multiple independent search angles may be present.
+            Treat duplicate coverage of the same event as one
+            story and use the strongest sources as evidence.
 
             SOURCES:
             $sourceText
