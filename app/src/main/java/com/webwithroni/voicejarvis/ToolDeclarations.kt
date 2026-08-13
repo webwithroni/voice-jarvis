@@ -66,6 +66,18 @@ object ToolDeclarations {
         put(fn("search_web", "Search the web for real-time or current information: news, prices, scores, weather, or any fact that may have changed recently.",
             schema(JSONObject().put("query", strProp("The search query")), listOf("query"))))
 
+        put(fn(
+            "deep_research",
+            "Perform multi-source research for questions that need a deeper current analysis, multiple sources, comparisons, recent developments, or important points. Use this instead of search_web when the user explicitly asks for research, latest AI news with important points, comparisons, a detailed analysis, or a sourced overview.",
+            schema(
+                JSONObject().put(
+                    "query",
+                    strProp("The complete research question")
+                ),
+                listOf("query")
+            )
+        ))
+
         put(fn("media_control", "Control whatever media is currently playing on the phone.",
             schema(JSONObject().put("action", strProp("One of: play_pause, next, previous, stop")), listOf("action"))))
 

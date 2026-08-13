@@ -35,8 +35,21 @@ class ToolExecutor(private val context: Context) {
                 "set_alarm" -> setAlarm(args.optInt("hour"), args.optInt("minute"), args.optString("label"))
                 "set_timer" -> setTimer(args.optInt("seconds"), args.optString("label"))
                 "get_battery" -> getBattery()
-                "search_web" -> searchWeb(args.optString("query"))
-                "media_control" -> mediaControl(args.optString("action"))
+
+                "search_web" ->
+                    searchWeb(
+                        args.optString("query")
+                    )
+
+                "deep_research" ->
+                    ResearchRouter.research(
+                        args.optString("query")
+                    )
+
+                "media_control" ->
+                    mediaControl(
+                        args.optString("action")
+                    )
                 "set_volume" -> setVolume(args.optInt("percent"))
                 "open_browser" -> openBrowser(args.optString("url"))
                 "search_google" -> searchGoogle(args.optString("query"))
@@ -175,11 +188,37 @@ class ToolExecutor(private val context: Context) {
             conn.readTimeout = 12000
 
             val body = JSONObject().apply {
-                put("api_key", BuildConfig.TAVILY_API_KEY)
-                put("query", query)
-                put("max_results", 3)
-                put("search_depth", "basic")
+
+                put(
+                    "query",
+                    query
+                )
+
+                put(
+                    "search_depth",
+                    "fast"
+                )
+
+                put(
+                    "max_results",
+                    5
+                )
+
+                put(
+                    "include_answer",
+                    false
+                )
+
+                put(
+                    "auto_parameters",
+                    false
+                )
             }
+
+            conn.setRequestProperty(
+                "Authorization",
+                "Bearer ${BuildConfig.TAVILY_API_KEY}"
+            )
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
             if (conn.responseCode !in 200..299) return result(false, "Search failed (HTTP " + conn.responseCode + ")")
@@ -190,8 +229,23 @@ class ToolExecutor(private val context: Context) {
             for (i in 0 until minOf(results.length(), 3)) {
                 val r = results.getJSONObject(i)
                 val title = r.optString("title")
-                val snippet = r.optString("content").take(200)
-                lines.add("- " + title + ": " + snippet)
+                val url = r.optString("url")
+                val snippet =
+                    r.optString("content")
+                        .replace(Regex("\\s+"), " ")
+                        .take(420)
+
+                lines.add(
+                    "- " +
+                        title +
+                        ": " +
+                        snippet +
+                        if (url.isNotBlank()) {
+                            " [" + url + "]"
+                        } else {
+                            ""
+                        }
+                )
             }
             if (lines.isEmpty()) result(false, "No results found for '" + query + "'")
             else result(true, lines.joinToString(System.lineSeparator()))
