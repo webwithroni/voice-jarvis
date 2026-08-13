@@ -37,6 +37,10 @@ class JarvisService : Service() {
     private lateinit var audioEngine: AudioEngine
     private lateinit var toolExecutor: ToolExecutor
 
+    private lateinit var capabilityBusToolBridge:
+        CapabilityBusToolBridge
+    private lateinit var capabilityBus: CapabilityBus
+
     private var geminiClient: GeminiLiveClient? = null
 
     private val handler = Handler(Looper.getMainLooper())
@@ -157,6 +161,9 @@ class JarvisService : Service() {
         )
 
         toolExecutor = ToolExecutor(this)
+
+        capabilityBus =
+            CapabilityBus(this)
 
         audioEngine = AudioEngine(
             onMicChunk = { chunk ->
@@ -598,10 +605,11 @@ class JarvisService : Service() {
 
                 /*
                  * Keep tool telemetry in memory during the turn.
-                 * It is flushed once when Gemini completes the turn.
                  */
                 synchronized(firebaseTurnTools) {
-                    if (!firebaseTurnTools.contains(name)) {
+                    if (
+                        !firebaseTurnTools.contains(name)
+                    ) {
                         firebaseTurnTools.add(name)
                     }
                 }
@@ -610,7 +618,18 @@ class JarvisService : Service() {
                     .toolStarted(name)
 
                 val toolStartedAt =
-                    android.os.SystemClock.elapsedRealtime()
+                    android.os.SystemClock
+                        .elapsedRealtime()
+
+                /*
+                 * First try the new Capability Bus.
+                 *
+                 * Only intentionally migrated tools are handled here.
+                 * Everything else stays on the proven ToolExecutor path.
+                 */
+                val busHandles =
+                    capabilityBusToolBridge
+                        .handles(name)
 
                 val performanceTraceId =
                     FirebasePerformanceManager
@@ -618,11 +637,33 @@ class JarvisService : Service() {
 
                 val result =
                     try {
-                        toolExecutor.execute(
-                            name,
-                            args
-                        )
-                    } catch (e: Exception) {
+
+                        if (
+                            busHandles
+                        ) {
+
+                            val actionResult =
+                                capabilityBusToolBridge
+                                    .execute(
+                                        name,
+                                        args
+                                    )
+
+                            actionResultToJson(
+                                actionResult
+                            )
+
+                        } else {
+
+                            toolExecutor.execute(
+                                name,
+                                args
+                            )
+                        }
+
+                    } catch (
+                        e: Exception
+                    ) {
 
                         FirebaseAnalyticsManager
                             .toolFailed(name)
@@ -637,7 +678,8 @@ class JarvisService : Service() {
                     }
 
                 val toolDurationMs =
-                    android.os.SystemClock.elapsedRealtime() -
+                    android.os.SystemClock
+                        .elapsedRealtime() -
                         toolStartedAt
 
                 val toolSucceeded =
@@ -646,12 +688,15 @@ class JarvisService : Service() {
                         true
                     )
 
-                if (toolSucceeded) {
+                if (
+                    toolSucceeded
+                ) {
 
                     FirebaseAnalyticsManager
                         .toolCompleted(
                             tool = name,
-                            durationMs = toolDurationMs
+                            durationMs =
+                                toolDurationMs
                         )
 
                 } else {
@@ -663,7 +708,7 @@ class JarvisService : Service() {
                 FirebasePerformanceManager
                     .finishTool(
                         performanceTraceId,
-                        success = toolSucceeded
+                        toolSucceeded
                     )
 
                 geminiClient?.sendToolResponse(
@@ -677,6 +722,15 @@ class JarvisService : Service() {
                     log(
                         "Tool: $name"
                     )
+
+                    if (
+                        busHandles
+                    ) {
+
+                        log(
+                            "Capability Bus: $name"
+                        )
+                    }
                 }
             },
 
@@ -865,6 +919,86 @@ class JarvisService : Service() {
         )
 
         geminiClient?.connect()
+    }
+
+    /**
+     * Execute a device-control action through the canonical
+     * CapabilityBus.
+     *
+     * This bridge is intentionally small in V1.
+     * Legacy web/research tools continue using ToolExecutor.
+     */
+    private fun executeCapability(
+        action: String,
+        target: String? = null,
+        parameters: Map<String, String> = emptyMap()
+    ): ActionResult {
+
+        return capabilityBus.execute(
+            action = action,
+            target = target,
+            parameters = parameters
+        )
+    }
+
+    private fun actionResultToJson(
+        result: ActionResult
+    ): org.json.JSONObject {
+
+        val json =
+            org.json.JSONObject()
+
+        json.put(
+            "success",
+            result.status ==
+                ActionStatus.EXECUTED ||
+                result.status ==
+                ActionStatus.VERIFIED
+        )
+
+        json.put(
+            "status",
+            result.status.name.lowercase()
+        )
+
+        json.put(
+            "message",
+            result.message
+        )
+
+        json.put(
+            "verified",
+            result.verified
+        )
+
+        json.put(
+            "requiresConfirmation",
+            result.requiresConfirmation
+        )
+
+        if (
+            result.data.isNotEmpty()
+        ) {
+
+            val data =
+                org.json.JSONObject()
+
+            result.data.forEach {
+                (key, value) ->
+
+                data.put(
+                    key,
+                    value
+                )
+            }
+
+            json.put(
+                "data",
+                data
+            )
+        }
+
+        return json
     }
 
     private fun normalizeTranscript(

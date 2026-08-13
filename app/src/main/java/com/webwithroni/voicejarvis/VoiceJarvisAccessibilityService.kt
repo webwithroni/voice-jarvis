@@ -222,6 +222,14 @@ class VoiceJarvisAccessibilityService :
         }
     }
 
+    fun getScreenElement(
+        id: Int
+    ): ScreenElement? {
+
+        return lastElements
+            .getOrNull(id)
+    }
+
     fun tapPoint(
         x: Int,
         y: Int

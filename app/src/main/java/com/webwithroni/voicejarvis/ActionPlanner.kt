@@ -1,12 +1,14 @@
 package com.webwithroni.voicejarvis
 
 /**
- * Converts a raw action intent into a normalized ActionRequest.
+ * Converts raw actions into normalized ActionRequest objects.
  *
- * The planner does NOT execute anything.
- * It also does NOT decide security policy.
+ * Planner responsibilities:
+ * - normalize action names
+ * - calculate authoritative risk
+ * - attach capability information
  *
- * CapabilityManager + RiskEngine remain authoritative.
+ * Planner does NOT execute actions.
  */
 class ActionPlanner(
     private val capabilityManager: CapabilityManager
@@ -27,28 +29,40 @@ class ActionPlanner(
                     "_"
                 )
 
-        val risk =
-            RiskEngine.riskFor(
-                normalized
-            )
-
         return ActionRequest(
             action = normalized,
-            target = target?.trim(),
+            target = target
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                },
             parameters = parameters,
-            risk = risk
+            risk =
+                RiskEngine.riskFor(
+                    normalized
+                )
         )
     }
 
+    /**
+     * Validate a planned action.
+     *
+     * null = allowed to continue.
+     */
     fun validate(
         request: ActionRequest
     ): ActionResult? {
 
         val capability =
-            capabilityManager.canExecute(
-                request
-            )
+            capabilityManager
+                .canExecute(
+                    request
+                )
 
+        /*
+         * Unknown or unavailable capabilities
+         * must never reach an executor.
+         */
         if (!capability.available) {
 
             return ActionResult(
@@ -57,14 +71,21 @@ class ActionPlanner(
                 action =
                     request.action,
                 message =
-                    "${capability.name} is not available.",
-                verified = false
+                    if (
+                        capability.id ==
+                        CapabilityManager.UNKNOWN
+                    ) {
+                        "Capability '${request.action}' is not registered."
+                    } else {
+                        "${capability.name} is not available."
+                    },
+                verified = false,
+                requiresConfirmation = false
             )
         }
 
         /*
-         * Do not trust a risk value supplied by an LLM.
-         * Recalculate from the action itself.
+         * Never trust risk supplied by an upstream model.
          */
         val authoritativeRisk =
             RiskEngine.riskFor(
@@ -99,7 +120,7 @@ class ActionPlanner(
                 action =
                     request.action,
                 message =
-                    "User confirmation is required.",
+                    "User confirmation is required before this action.",
                 verified = false,
                 requiresConfirmation = true
             )

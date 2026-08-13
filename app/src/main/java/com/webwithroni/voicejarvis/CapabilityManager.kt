@@ -2,18 +2,25 @@ package com.webwithroni.voicejarvis
 
 import android.content.Context
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 
 /**
  * Central capability registry.
  *
- * No other subsystem should guess whether a capability
- * is available. Ask this manager.
+ * This is the authoritative answer to:
+ *
+ * "Can Jarvis perform this capability on this device?"
+ *
+ * Unknown capabilities are NEVER treated as available.
  */
 class CapabilityManager(
     private val context: Context
 ) {
 
     companion object {
+
+        const val UNKNOWN =
+            "unknown"
 
         const val ACCESSIBILITY =
             "screen_control"
@@ -55,16 +62,23 @@ class CapabilityManager(
             "payment_assistance"
     }
 
-    fun isAccessibilityEnabled(): Boolean {
-        return VoiceJarvisAccessibilityService
-            .isEnabled(context)
-    }
-
     fun get(
         capability: String
     ): CapabilityState {
 
         return when (capability) {
+
+            UNKNOWN ->
+                CapabilityState(
+                    id = UNKNOWN,
+                    name = "Unknown Capability",
+                    available = false,
+                    level = 0,
+                    risk = ActionRisk.HIGH,
+                    description =
+                        "This capability is not registered.",
+                    setupRequired = false
+                )
 
             ACCESSIBILITY ->
                 CapabilityState(
@@ -73,8 +87,13 @@ class CapabilityManager(
                     available =
                         isAccessibilityEnabled(),
                     level =
-                        if (isAccessibilityEnabled()) 4 else 0,
-                    risk = ActionRisk.HIGH,
+                        if (isAccessibilityEnabled()) {
+                            4
+                        } else {
+                            0
+                        },
+                    risk =
+                        ActionRisk.HIGH,
                     description =
                         "Read and interact with visible apps.",
                     setupRequired =
@@ -82,56 +101,69 @@ class CapabilityManager(
                 )
 
             MICROPHONE ->
-                CapabilityState(
+                permissionCapability(
                     id = MICROPHONE,
                     name = "Microphone",
-                    available = hasPermission(
-                        android.Manifest.permission.RECORD_AUDIO
-                    ),
-                    level = 4,
-                    risk = ActionRisk.SAFE,
-                    description =
-                        "Listen for voice commands."
+                    permission =
+                        android.Manifest.permission.RECORD_AUDIO,
+                    risk =
+                        ActionRisk.SAFE,
+                    levelWhenAvailable = 4
                 )
 
             CONTACTS ->
                 permissionCapability(
-                    CONTACTS,
-                    "Contacts",
-                    android.Manifest.permission.READ_CONTACTS,
-                    ActionRisk.MEDIUM
+                    id = CONTACTS,
+                    name = "Contacts",
+                    permission =
+                        android.Manifest.permission.READ_CONTACTS,
+                    risk =
+                        ActionRisk.MEDIUM,
+                    levelWhenAvailable = 3
                 )
 
             PHONE ->
                 permissionCapability(
-                    PHONE,
-                    "Phone",
-                    android.Manifest.permission.CALL_PHONE,
-                    ActionRisk.MEDIUM
+                    id = PHONE,
+                    name = "Phone",
+                    permission =
+                        android.Manifest.permission.CALL_PHONE,
+                    risk =
+                        ActionRisk.MEDIUM,
+                    levelWhenAvailable = 3
                 )
 
             SMS ->
                 permissionCapability(
-                    SMS,
-                    "SMS",
-                    android.Manifest.permission.SEND_SMS,
-                    ActionRisk.MEDIUM
+                    id = SMS,
+                    name = "SMS",
+                    permission =
+                        android.Manifest.permission.SEND_SMS,
+                    risk =
+                        ActionRisk.MEDIUM,
+                    levelWhenAvailable = 3
                 )
 
             LOCATION ->
                 permissionCapability(
-                    LOCATION,
-                    "Location",
-                    android.Manifest.permission.ACCESS_FINE_LOCATION,
-                    ActionRisk.MEDIUM
+                    id = LOCATION,
+                    name = "Location",
+                    permission =
+                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    risk =
+                        ActionRisk.MEDIUM,
+                    levelWhenAvailable = 3
                 )
 
             CAMERA ->
                 permissionCapability(
-                    CAMERA,
-                    "Camera",
-                    android.Manifest.permission.CAMERA,
-                    ActionRisk.MEDIUM
+                    id = CAMERA,
+                    name = "Camera",
+                    permission =
+                        android.Manifest.permission.CAMERA,
+                    risk =
+                        ActionRisk.MEDIUM,
+                    levelWhenAvailable = 3
                 )
 
             MEDIA ->
@@ -153,7 +185,7 @@ class CapabilityManager(
                     level = 4,
                     risk = ActionRisk.LOW,
                     description =
-                        "Launch and manage supported apps."
+                        "Launch supported applications."
                 )
 
             WEB_CONTROL ->
@@ -163,7 +195,11 @@ class CapabilityManager(
                     available =
                         isAccessibilityEnabled(),
                     level =
-                        if (isAccessibilityEnabled()) 3 else 0,
+                        if (isAccessibilityEnabled()) {
+                            3
+                        } else {
+                            0
+                        },
                     risk = ActionRisk.MEDIUM,
                     description =
                         "Interact with visible web interfaces.",
@@ -189,7 +225,11 @@ class CapabilityManager(
                     available =
                         isAccessibilityEnabled(),
                     level =
-                        if (isAccessibilityEnabled()) 2 else 0,
+                        if (isAccessibilityEnabled()) {
+                            2
+                        } else {
+                            0
+                        },
                     risk = ActionRisk.CRITICAL,
                     description =
                         "Prepare payment flows requiring user authorization.",
@@ -204,7 +244,11 @@ class CapabilityManager(
                     available =
                         isNotificationAccessGranted(),
                     level =
-                        if (isNotificationAccessGranted()) 4 else 0,
+                        if (isNotificationAccessGranted()) {
+                            4
+                        } else {
+                            0
+                        },
                     risk = ActionRisk.MEDIUM,
                     description =
                         "Read and act on notifications.",
@@ -220,14 +264,15 @@ class CapabilityManager(
                     level = 0,
                     risk = ActionRisk.HIGH,
                     description =
-                        "Unknown capability.",
-                    setupRequired = true
+                        "Capability is not registered.",
+                    setupRequired = false
                 )
         }
     }
 
-    fun all(): List<CapabilityState> =
-        listOf(
+    fun all(): List<CapabilityState> {
+
+        return listOf(
             get(MICROPHONE),
             get(ACCESSIBILITY),
             get(NOTIFICATIONS),
@@ -242,6 +287,7 @@ class CapabilityManager(
             get(WEB_CONTROL),
             get(PAYMENT)
         )
+    }
 
     fun canExecute(
         request: ActionRequest
@@ -252,7 +298,9 @@ class CapabilityManager(
                 request.action
             )
 
-        return get(capability)
+        return get(
+            capability
+        )
     }
 
     fun capabilityForAction(
@@ -260,12 +308,15 @@ class CapabilityManager(
     ): String {
 
         return when (
-            action.lowercase()
+            action
+                .trim()
+                .lowercase()
         ) {
 
             "scroll",
             "swipe",
             "tap",
+            "tap_element",
             "long_press",
             "type",
             "read_screen",
@@ -300,8 +351,15 @@ class CapabilityManager(
             "web_type" ->
                 WEB_CONTROL
 
-            else ->
+            "media_control" ->
+                MEDIA
+
+            "get_battery",
+            "get_device_info" ->
                 APP_CONTROL
+
+            else ->
+                UNKNOWN
         }
     }
 
@@ -309,7 +367,8 @@ class CapabilityManager(
         id: String,
         name: String,
         permission: String,
-        risk: ActionRisk
+        risk: ActionRisk,
+        levelWhenAvailable: Int
     ): CapabilityState {
 
         val available =
@@ -322,7 +381,11 @@ class CapabilityManager(
             name = name,
             available = available,
             level =
-                if (available) 3 else 0,
+                if (available) {
+                    levelWhenAvailable
+                } else {
+                    0
+                },
             risk = risk,
             description =
                 "$name access.",
@@ -335,12 +398,21 @@ class CapabilityManager(
         permission: String
     ): Boolean {
 
-        return androidx.core.content.ContextCompat
+        return ContextCompat
             .checkSelfPermission(
                 context,
                 permission
             ) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun isAccessibilityEnabled():
+        Boolean {
+
+        return VoiceJarvisAccessibilityService
+            .isEnabled(
+                context
+            )
     }
 
     private fun isNotificationAccessGranted():

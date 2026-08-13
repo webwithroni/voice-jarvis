@@ -1,11 +1,10 @@
 package com.webwithroni.voicejarvis
 
 /**
- * Central action safety policy.
+ * Central deterministic action safety policy.
  *
- * This is intentionally deterministic. The LLM may suggest
- * an action, but the LLM does not decide whether confirmation
- * is required.
+ * The model can request an action.
+ * The model cannot define the action's risk.
  */
 object RiskEngine {
 
@@ -21,6 +20,7 @@ object RiskEngine {
             "scroll",
             "swipe",
             "tap",
+            "tap_element",
             "back",
             "home",
             "recents",
@@ -62,7 +62,9 @@ object RiskEngine {
         risk: ActionRisk
     ): Boolean {
 
-        return when (risk) {
+        return when (
+            risk
+        ) {
 
             ActionRisk.SAFE ->
                 false
@@ -92,6 +94,7 @@ object RiskEngine {
             "scroll",
             "swipe",
             "tap",
+            "tap_element",
             "type",
             "send_message",
             "send_sms",

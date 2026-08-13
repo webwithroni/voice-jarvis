@@ -7,8 +7,15 @@ import android.net.Uri
 /**
  * Central action execution gateway.
  *
- * New capabilities should be added here rather than directly
- * inside Gemini/JarvisService.
+ * The Capability Bus is responsible for:
+ *
+ * - normalization
+ * - capability checks
+ * - risk validation
+ * - confirmation policy
+ *
+ * This class is responsible only for actually performing
+ * the normalized action.
  */
 class ActionExecutor(
     private val context: Context
@@ -55,6 +62,7 @@ class ActionExecutor(
             if (
                 validation != null
             ) {
+
                 return validation
             }
         }
@@ -75,6 +83,11 @@ class ActionExecutor(
 
             "tap" ->
                 tap(
+                    request
+                )
+
+            "tap_element" ->
+                tapElement(
                     request
                 )
 
@@ -169,7 +182,9 @@ class ActionExecutor(
 
             ActionResult(
                 status =
-                    if (result.verified) {
+                    if (
+                        result.verified
+                    ) {
                         ActionStatus.VERIFIED
                     } else {
                         ActionStatus.EXECUTED
@@ -240,8 +255,16 @@ class ActionExecutor(
 
         return ActionResult(
             status =
-                if (result.success) {
-                    ActionStatus.EXECUTED
+                if (
+                    result.success
+                ) {
+                    if (
+                        result.verified
+                    ) {
+                        ActionStatus.VERIFIED
+                    } else {
+                        ActionStatus.EXECUTED
+                    }
                 } else {
                     ActionStatus.FAILED
                 },
@@ -298,7 +321,9 @@ class ActionExecutor(
 
         return ActionResult(
             status =
-                if (result.success) {
+                if (
+                    result.success
+                ) {
                     ActionStatus.EXECUTED
                 } else {
                     ActionStatus.FAILED
@@ -309,6 +334,70 @@ class ActionExecutor(
                 result.message,
             verified =
                 result.verified
+        )
+    }
+
+    /**
+     * Tap an element from the latest accessibility snapshot.
+     *
+     * VoiceJarvisAccessibilityService internally resolves the
+     * descriptor to a fresh AccessibilityNodeInfo before tapping.
+     */
+    private fun tapElement(
+        request: ActionRequest
+    ): ActionResult {
+
+        val service =
+            accessibility()
+                ?: return unavailable(
+                    request.action,
+                    "Accessibility service is not enabled."
+                )
+
+        val id =
+            request.parameters["id"]
+                ?.toIntOrNull()
+
+        if (
+            id == null ||
+            id < 0
+        ) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "A valid screen element id is required."
+            )
+        }
+
+        val success =
+            service.tapElement(
+                id
+            )
+
+        return ActionResult(
+            status =
+                if (
+                    success
+                ) {
+                    ActionStatus.EXECUTED
+                } else {
+                    ActionStatus.FAILED
+                },
+            action =
+                request.action,
+            message =
+                if (
+                    success
+                ) {
+                    "Screen element $id tapped."
+                } else {
+                    "Unable to tap screen element $id."
+                },
+            verified = false
         )
     }
 
@@ -362,7 +451,9 @@ class ActionExecutor(
 
         return ActionResult(
             status =
-                if (result.success) {
+                if (
+                    result.success
+                ) {
                     ActionStatus.EXECUTED
                 } else {
                     ActionStatus.FAILED
@@ -398,10 +489,13 @@ class ActionExecutor(
                         "Text is required."
                 )
 
+        val field =
+            request.parameters["field"]
+                ?: text
+
         val node =
             service.findTextNode(
-                request.parameters["field"]
-                    ?: text,
+                field,
                 exact = false
             )
 
@@ -431,7 +525,9 @@ class ActionExecutor(
 
             ActionResult(
                 status =
-                    if (result.success) {
+                    if (
+                        result.success
+                    ) {
                         ActionStatus.EXECUTED
                     } else {
                         ActionStatus.FAILED
@@ -489,9 +585,14 @@ class ActionExecutor(
                     "Accessibility service is not enabled."
                 )
 
+        val success =
+            service.goBack()
+
         return ActionResult(
             status =
-                if (service.goBack()) {
+                if (
+                    success
+                ) {
                     ActionStatus.EXECUTED
                 } else {
                     ActionStatus.FAILED
@@ -499,7 +600,13 @@ class ActionExecutor(
             action =
                 "back",
             message =
-                "Back action executed."
+                if (
+                    success
+                ) {
+                    "Back action executed."
+                } else {
+                    "Back action failed."
+                }
         )
     }
 
@@ -513,9 +620,14 @@ class ActionExecutor(
                     "Accessibility service is not enabled."
                 )
 
+        val success =
+            service.goHome()
+
         return ActionResult(
             status =
-                if (service.goHome()) {
+                if (
+                    success
+                ) {
                     ActionStatus.EXECUTED
                 } else {
                     ActionStatus.FAILED
@@ -523,7 +635,13 @@ class ActionExecutor(
             action =
                 "home",
             message =
-                "Home action executed."
+                if (
+                    success
+                ) {
+                    "Home action executed."
+                } else {
+                    "Home action failed."
+                }
         )
     }
 
@@ -537,9 +655,14 @@ class ActionExecutor(
                     "Accessibility service is not enabled."
                 )
 
+        val success =
+            service.openRecents()
+
         return ActionResult(
             status =
-                if (service.openRecents()) {
+                if (
+                    success
+                ) {
                     ActionStatus.EXECUTED
                 } else {
                     ActionStatus.FAILED
@@ -547,7 +670,13 @@ class ActionExecutor(
             action =
                 "recents",
             message =
-                "Recent apps opened."
+                if (
+                    success
+                ) {
+                    "Recent apps opened."
+                } else {
+                    "Unable to open recent apps."
+                }
         )
     }
 
@@ -581,7 +710,9 @@ class ActionExecutor(
                         packageName
                     )
 
-            if (intent == null) {
+            if (
+                intent == null
+            ) {
 
                 ActionResult(
                     status =
@@ -612,7 +743,9 @@ class ActionExecutor(
                 )
             }
 
-        } catch (e: Exception) {
+        } catch (
+            e: Exception
+        ) {
 
             ActionResult(
                 status =
@@ -620,7 +753,11 @@ class ActionExecutor(
                 action =
                     request.action,
                 message =
-                    "Could not launch application: ${e.message}"
+                    "Application launch failed: " +
+                        (
+                            e.message
+                                ?: e.javaClass.simpleName
+                        )
             )
         }
     }
@@ -636,7 +773,8 @@ class ActionExecutor(
             action =
                 action,
             message =
-                message
+                message,
+            verified = false
         )
     }
 }
