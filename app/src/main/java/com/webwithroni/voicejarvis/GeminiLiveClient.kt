@@ -44,6 +44,12 @@ class GeminiLiveClient(
 
     private var webSocket: WebSocket? = null
 
+    /*
+     * WebSocket transport health.
+     *
+     * OkHttp ping frames are transport-level keepalive traffic.
+     * They are NOT fake microphone/audio input.
+     */
     private val client =
         OkHttpClient.Builder()
             .readTimeout(
@@ -58,13 +64,15 @@ class GeminiLiveClient(
                 15,
                 TimeUnit.SECONDS
             )
+            .pingInterval(
+                20,
+                TimeUnit.SECONDS
+            )
             .build()
 
     private val handler =
         Handler(Looper.getMainLooper())
 
-    private var keepAliveRunnable: Runnable? = null
-    private var sessionRenewRunnable: Runnable? = null
     private var reconnectRunnable: Runnable? = null
 
     @Volatile
@@ -76,16 +84,67 @@ class GeminiLiveClient(
     @Volatile
     private var reconnectScheduled = false
 
+    /*
+     * Gemini Live session resumption handle.
+     *
+     * The server periodically sends a new resumable handle.
+     * We reuse the latest valid handle when the WebSocket must
+     * be recreated.
+     */
+    @Volatile
+    private var sessionResumptionHandle: String? = null
+
+    /*
+     * Protect against callbacks from an older WebSocket changing
+     * state after a newer connection has already been established.
+     */
+    @Volatile
+    private var connectionGeneration: Long = 0L
+
+    @Volatile
+    private var transportState =
+        "DISCONNECTED"
+
+    @Volatile
+    private var lastInboundMessageAt: Long = 0L
+
+    @Volatile
+    private var lastSetupAt: Long = 0L
+
     fun connect() {
 
         if (manuallyClosed) {
             return
         }
 
-        cancelTimers()
+        cancelReconnect()
+
+        /*
+         * Invalidate the previous WebSocket before creating a
+         * replacement connection.
+         *
+         * This is especially important after Gemini GoAway:
+         * we never want two live sockets competing for the same
+         * assistant session.
+         */
+        val previousSocket =
+            webSocket
+
+        webSocket = null
+
+        previousSocket?.close(
+            1000,
+            "Replacing connection"
+        )
+
+        val generation =
+            synchronized(this) {
+                connectionGeneration += 1L
+                connectionGeneration
+            }
 
         setupCompleted = false
-        reconnectScheduled = false
+        transportState = "CONNECTING"
 
         val url =
             "wss://generativelanguage.googleapis.com/ws/" +
@@ -97,15 +156,38 @@ class GeminiLiveClient(
                 .url(url)
                 .build()
 
-        webSocket =
+        val socket =
             client.newWebSocket(
                 request,
                 object : WebSocketListener() {
+
+                    private fun isCurrentConnection():
+                        Boolean {
+
+                        return generation ==
+                            connectionGeneration
+                    }
 
                     override fun onOpen(
                         webSocket: WebSocket,
                         response: Response
                     ) {
+
+                        if (
+                            !isCurrentConnection() ||
+                            manuallyClosed
+                        ) {
+
+                            webSocket.close(
+                                1000,
+                                "Superseded"
+                            )
+
+                            return
+                        }
+
+                        transportState =
+                            "CONNECTED"
 
                         sendSetup()
                     }
@@ -115,13 +197,35 @@ class GeminiLiveClient(
                         text: String
                     ) {
 
-                        handleMessage(text)
+                        if (
+                            !isCurrentConnection()
+                        ) {
+                            return
+                        }
+
+                        lastInboundMessageAt =
+                            android.os.SystemClock
+                                .elapsedRealtime()
+
+                        handleMessage(
+                            text
+                        )
                     }
 
                     override fun onMessage(
                         webSocket: WebSocket,
                         bytes: ByteString
                     ) {
+
+                        if (
+                            !isCurrentConnection()
+                        ) {
+                            return
+                        }
+
+                        lastInboundMessageAt =
+                            android.os.SystemClock
+                                .elapsedRealtime()
 
                         handleMessage(
                             bytes.utf8()
@@ -134,14 +238,19 @@ class GeminiLiveClient(
                         response: Response?
                     ) {
 
+                        if (
+                            !isCurrentConnection()
+                        ) {
+                            return
+                        }
+
                         setupCompleted = false
+                        transportState = "DISCONNECTED"
 
                         onError(
                             "WebSocket error: " +
                                 "${t.javaClass.simpleName}: ${t.message}"
                         )
-
-                        cancelTimers()
 
                         onDisconnected()
 
@@ -154,9 +263,14 @@ class GeminiLiveClient(
                         reason: String
                     ) {
 
-                        setupCompleted = false
+                        if (
+                            !isCurrentConnection()
+                        ) {
+                            return
+                        }
 
-                        cancelTimers()
+                        setupCompleted = false
+                        transportState = "DISCONNECTED"
 
                         if (!manuallyClosed) {
 
@@ -170,8 +284,26 @@ class GeminiLiveClient(
                             scheduleReconnect()
                         }
                     }
+
+                    override fun onClosing(
+                        webSocket: WebSocket,
+                        code: Int,
+                        reason: String
+                    ) {
+
+                        if (
+                            !isCurrentConnection()
+                        ) {
+                            return
+                        }
+
+                        transportState =
+                            "RECONNECTING"
+                    }
                 }
             )
+
+        webSocket = socket
     }
 
     private fun sendSetup() {
@@ -200,6 +332,42 @@ class GeminiLiveClient(
                                             systemPrompt
                                         )
                                     )
+                                )
+                            }
+                        )
+
+                        /*
+                         * Gemini Live connection/session reliability.
+                         *
+                         * Google recommends session resumption because
+                         * the WebSocket connection is periodically reset.
+                         * Context compression prevents long-lived audio
+                         * sessions from exhausting the context window.
+                         */
+                        put(
+                            "sessionResumption",
+                            JSONObject().apply {
+
+                                sessionResumptionHandle
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?.let {
+                                        put(
+                                            "handle",
+                                            it
+                                        )
+                                    }
+                            }
+                        )
+
+                        put(
+                            "contextWindowCompression",
+                            JSONObject().apply {
+
+                                put(
+                                    "slidingWindow",
+                                    JSONObject()
                                 )
                             }
                         )
@@ -359,14 +527,81 @@ class GeminiLiveClient(
             ) {
 
                 setupCompleted = true
+                transportState = "READY"
+
+                lastSetupAt =
+                    android.os.SystemClock
+                        .elapsedRealtime()
+
+                lastInboundMessageAt =
+                    lastSetupAt
 
                 onSetupComplete()
 
-                scheduleKeepAlive()
-
-                scheduleSessionRenew()
-
                 return
+            }
+
+            /*
+             * Session resumption update.
+             *
+             * Keep the newest resumable handle.
+             */
+            json.optJSONObject(
+                "sessionResumptionUpdate"
+            )?.let { update ->
+
+                val resumable =
+                    update.optBoolean(
+                        "resumable",
+                        false
+                    )
+
+                val newHandle =
+                    update.optString(
+                        "newHandle"
+                    )
+
+                if (
+                    resumable &&
+                    newHandle.isNotBlank()
+                ) {
+
+                    sessionResumptionHandle =
+                        newHandle
+                }
+            }
+
+            /*
+             * Gemini announces an upcoming WebSocket reset
+             * with GoAway. Do not wait for a hard failure.
+             */
+            json.optJSONObject(
+                "goAway"
+            )?.let { goAway ->
+
+                val timeLeft =
+                    goAway.optLong(
+                        "timeLeft",
+                        0L
+                    )
+
+                transportState =
+                    "RECONNECTING"
+
+                scheduleReconnect(
+                    delayMs =
+                        when {
+                            timeLeft > 5000L ->
+                                (timeLeft - 2000L)
+                                    .coerceAtMost(5000L)
+
+                            timeLeft > 0L ->
+                                timeLeft
+
+                            else ->
+                                1000L
+                        }
+                )
             }
 
             /*
@@ -611,16 +846,45 @@ class GeminiLiveClient(
                 )
             }
 
+        val socket =
+            webSocket
+
+        if (
+            socket == null ||
+            !setupCompleted
+        ) {
+
+            /*
+             * Do not silently discard the user's first speech
+             * after an unexpected connection loss.
+             *
+             * Trigger fast recovery and let the next mic chunk
+             * use the fresh session.
+             */
+            if (!manuallyClosed) {
+                scheduleReconnect(250L)
+            }
+
+            return
+        }
+
         val sent =
-            webSocket?.send(
+            socket.send(
                 message.toString()
-            ) ?: false
+            )
 
         if (!sent) {
 
+            setupCompleted = false
+            transportState = "RECONNECTING"
+
             onError(
-                "Audio send failed: WebSocket is not open."
+                "Audio send failed: WebSocket rejected the frame."
             )
+
+            onDisconnected()
+
+            scheduleReconnect(250L)
         }
     }
 
@@ -667,7 +931,9 @@ class GeminiLiveClient(
                 )
             }
 
-        webSocket?.send(
+        webSocket?.takeIf {
+            setupCompleted
+        }?.send(
             message.toString()
         )
     }
@@ -710,66 +976,9 @@ class GeminiLiveClient(
         )
     }
 
-    private fun scheduleKeepAlive() {
-
-        keepAliveRunnable =
-            object : Runnable {
-
-                override fun run() {
-
-                    if (
-                        !manuallyClosed &&
-                        setupCompleted
-                    ) {
-
-                        /*
-                         * Silent PCM keep-alive.
-                         *
-                         * 320 bytes = 10 ms at 16 kHz
-                         * mono 16-bit.
-                         */
-                        sendAudioChunk(
-                            ByteArray(320)
-                        )
-
-                        handler.postDelayed(
-                            this,
-                            8000
-                        )
-                    }
-                }
-            }
-
-        handler.postDelayed(
-            keepAliveRunnable!!,
-            8000
-        )
-    }
-
-    private fun scheduleSessionRenew() {
-
-        sessionRenewRunnable =
-            Runnable {
-
-                if (
-                    !manuallyClosed
-                ) {
-
-                    disconnect(
-                        manual = false
-                    )
-
-                    connect()
-                }
-            }
-
-        handler.postDelayed(
-            sessionRenewRunnable!!,
-            540_000
-        )
-    }
-
-    private fun scheduleReconnect() {
+    private fun scheduleReconnect(
+        delayMs: Long = 1000L
+    ) {
 
         if (
             manuallyClosed ||
@@ -779,11 +988,13 @@ class GeminiLiveClient(
         }
 
         reconnectScheduled = true
+        transportState = "RECONNECTING"
 
         reconnectRunnable =
             Runnable {
 
                 reconnectScheduled = false
+                reconnectRunnable = null
 
                 if (!manuallyClosed) {
                     connect()
@@ -792,29 +1003,24 @@ class GeminiLiveClient(
 
         handler.postDelayed(
             reconnectRunnable!!,
-            3000
+            delayMs.coerceIn(250L, 5000L)
         )
     }
 
-    private fun cancelTimers() {
-
-        keepAliveRunnable?.let {
-            handler.removeCallbacks(it)
-        }
-
-        sessionRenewRunnable?.let {
-            handler.removeCallbacks(it)
-        }
+    private fun cancelReconnect() {
 
         reconnectRunnable?.let {
-            handler.removeCallbacks(it)
+            handler.removeCallbacks(
+                it
+            )
         }
 
-        keepAliveRunnable = null
-        sessionRenewRunnable = null
         reconnectRunnable = null
-
         reconnectScheduled = false
+    }
+
+    private fun cancelTimers() {
+        cancelReconnect()
     }
 
     fun disconnect(
@@ -825,6 +1031,10 @@ class GeminiLiveClient(
 
         cancelTimers()
 
+        synchronized(this) {
+            connectionGeneration += 1L
+        }
+
         webSocket?.close(
             1000,
             "Client closed"
@@ -833,5 +1043,12 @@ class GeminiLiveClient(
         webSocket = null
 
         setupCompleted = false
+
+        transportState =
+            if (manual) {
+                "DISCONNECTED"
+            } else {
+                "RECONNECTING"
+            }
     }
 }
