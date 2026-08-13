@@ -5,10 +5,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -16,14 +19,20 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class JarvisScreensActivity : AppCompatActivity() {
 
     companion object {
+
         const val ROUTE = "route"
 
         const val HISTORY = "history"
+        const val DETAIL = "detail"
         const val SETTINGS = "settings"
         const val ONBOARDING = "onboarding"
         const val MICROPHONE = "microphone"
@@ -32,596 +41,2133 @@ class JarvisScreensActivity : AppCompatActivity() {
         const val NOTIFICATION = "notification"
         const val ACCESSIBILITY = "accessibility"
 
+        const val CONVERSATION_ID = "conversation_id"
+
         private const val REQUEST_PERMISSION = 700
     }
 
     private val bg = Color.parseColor("#07090D")
-    private val card = Color.parseColor("#11151C")
+    private val surface = Color.parseColor("#0D1118")
+    private val elevated = Color.parseColor("#121821")
     private val border = Color.parseColor("#202733")
+
+    private val white = Color.parseColor("#F4F7FB")
+    private val secondary = Color.parseColor("#8C97A8")
+    private val tertiary = Color.parseColor("#566171")
+
     private val cyan = Color.parseColor("#5CE7FF")
+    private val blue = Color.parseColor("#4A8DFF")
     private val violet = Color.parseColor("#9B7CFF")
     private val red = Color.parseColor("#FF7181")
-    private val white = Color.parseColor("#F4F7FB")
-    private val secondary = Color.parseColor("#98A4B3")
     private val green = Color.parseColor("#54E38E")
+    private val orange = Color.parseColor("#FFB86B")
+
+    private val dateFormat =
+        SimpleDateFormat(
+            "d MMM yyyy • h:mm a",
+            Locale.getDefault()
+        )
+
+    private val compactTime =
+        SimpleDateFormat(
+            "h:mm a",
+            Locale.getDefault()
+        )
+
+    private data class ConversationRow(
+        val id: String,
+        val source: String,
+        val startedAt: Date?,
+        val preview: String
+    )
+
+    private val conversations =
+        mutableListOf<ConversationRow>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val route = intent.getStringExtra(ROUTE) ?: SETTINGS
+        when (
+            intent.getStringExtra(ROUTE)
+        ) {
 
-        when (route) {
-            HISTORY -> showHistory()
-            SETTINGS -> showSettings()
-            ONBOARDING -> showOnboarding()
-            MICROPHONE -> showPermission(
-                title = "MICROPHONE",
-                description = "Allows Jarvis to hear your voice in real time.",
-                permission = Manifest.permission.RECORD_AUDIO
-            )
-            CALL -> showPermission(
-                title = "CALL ACCESS",
-                description = "Allows Jarvis to place calls when you explicitly ask.",
-                permission = Manifest.permission.CALL_PHONE
-            )
-            SMS -> showPermission(
-                title = "SMS ACCESS",
-                description = "Allows Jarvis to prepare and send SMS when permitted.",
-                permission = Manifest.permission.SEND_SMS
-            )
-            NOTIFICATION -> showNotificationPermission()
-            ACCESSIBILITY -> showAccessibilityPermission()
-            else -> showSettings()
+            HISTORY ->
+                showHistory()
+
+            DETAIL ->
+                showConversationDetail(
+                    intent.getStringExtra(
+                        CONVERSATION_ID
+                    )
+                )
+
+            SETTINGS ->
+                showSettings()
+
+            ONBOARDING ->
+                showOnboarding()
+
+            MICROPHONE ->
+                showPermission(
+                    title = "MICROPHONE ACCESS",
+                    subtitle = "Voice is how Jarvis understands you.",
+                    description =
+                        "Microphone access lets Jarvis hear your speech in real time. Raw microphone audio is not stored by Firebase.",
+                    icon = R.drawable.ic_mic,
+                    color = red,
+                    permission =
+                        Manifest.permission.RECORD_AUDIO
+                )
+
+            CALL ->
+                showPermission(
+                    title = "CALL ACCESS",
+                    subtitle = "Let Jarvis help with calls.",
+                    description =
+                        "Call permission allows Jarvis to place a phone call when you explicitly ask it to.",
+                    icon = R.drawable.ic_phone,
+                    color = green,
+                    permission =
+                        Manifest.permission.CALL_PHONE
+                )
+
+            SMS ->
+                showPermission(
+                    title = "MESSAGE ACCESS",
+                    subtitle = "Let Jarvis help you communicate.",
+                    description =
+                        "SMS permission allows Jarvis to send messages only when the action is explicitly requested and permitted.",
+                    icon = R.drawable.ic_message,
+                    color = blue,
+                    permission =
+                        Manifest.permission.SEND_SMS
+                )
+
+            NOTIFICATION ->
+                showNotificationPermission()
+
+            ACCESSIBILITY ->
+                showAccessibilityPermission()
+
+            else ->
+                showSettings()
         }
     }
 
-    private fun root(): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(bg)
-            setPadding(28, 36, 28, 28)
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density)
+            .toInt()
+
+    private fun lp(
+        width: Int = ViewGroup.LayoutParams.MATCH_PARENT,
+        height: Int = ViewGroup.LayoutParams.WRAP_CONTENT,
+        top: Int = 0,
+        bottom: Int = 0
+    ): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(
+            width,
+            height
+        ).apply {
+            topMargin = dp(top)
+            bottomMargin = dp(bottom)
         }
-    }
 
-    private fun title(text: String, subtitle: String? = null): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-
-            addView(
-                TextView(this@JarvisScreensActivity).apply {
-                    this.text = text
-                    textSize = 25f
-                    typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(white)
-                    letterSpacing = 0.04f
-                },
-                lpWrap()
+    private fun surfaceBackground(
+        color: Int = surface,
+        radius: Float = 22f,
+        stroke: Int = border
+    ): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radius.toInt()).toFloat()
+            setStroke(
+                dp(1),
+                stroke
             )
+        }
 
-            if (subtitle != null) {
-                addView(
-                    TextView(this@JarvisScreensActivity).apply {
-                        this.text = subtitle
-                        textSize = 14f
-                        setTextColor(secondary)
-                        setPadding(0, 8, 0, 0)
-                    },
-                    lpWrap()
+    private fun root(): ScrollView {
+
+        val content =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+
+                setPadding(
+                    dp(20),
+                    dp(18),
+                    dp(20),
+                    dp(28)
+                )
+
+                setBackgroundColor(
+                    bg
                 )
             }
+
+        return ScrollView(this).apply {
+
+            setBackgroundColor(bg)
+
+            isFillViewport = true
+
+            addView(
+                content,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+
+            tag = content
         }
     }
 
-    private fun backButton(container: LinearLayout) {
-        container.addView(
-            TextView(this).apply {
-                text = "‹  BACK"
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(cyan)
-                setPadding(0, 0, 0, 24)
-                setOnClickListener { finish() }
-            },
-            lpWrap()
-        )
-    }
+    private fun content(root: ScrollView):
+        LinearLayout =
+        root.tag as LinearLayout
 
-    private fun card(
+    private fun header(
         title: String,
         subtitle: String? = null,
+        showBack: Boolean = true
+    ): LinearLayout {
+
+        val wrapper =
+            LinearLayout(this).apply {
+                orientation =
+                    LinearLayout.HORIZONTAL
+                gravity =
+                    Gravity.CENTER_VERTICAL
+            }
+
+        if (showBack) {
+
+            wrapper.addView(
+                ImageButton(this).apply {
+
+                    setImageResource(
+                        R.drawable.ic_back
+                    )
+
+                    background =
+                        surfaceBackground(
+                            elevated,
+                            24f,
+                            border
+                        )
+
+                    contentDescription =
+                        "Back"
+
+                    setPadding(
+                        dp(12),
+                        dp(12),
+                        dp(12),
+                        dp(12)
+                    )
+
+                    setOnClickListener {
+                        finish()
+                    }
+                },
+                LinearLayout.LayoutParams(
+                    dp(48),
+                    dp(48)
+                )
+            )
+        }
+
+        val heading =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+
+                layoutParams =
+                    LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f
+                    ).apply {
+                        leftMargin =
+                            if (showBack) dp(12) else 0
+                    }
+
+                addView(
+                    TextView(this@JarvisScreensActivity).apply {
+                        text = title
+                        textSize = 25f
+                        typeface =
+                            Typeface.DEFAULT_BOLD
+                        letterSpacing = 0.05f
+                        setTextColor(white)
+                    },
+                    lp()
+                )
+
+                subtitle?.let {
+
+                    addView(
+                        TextView(this@JarvisScreensActivity).apply {
+                            text = it
+                            textSize = 14f
+                            setTextColor(
+                                secondary
+                            )
+                            setPadding(
+                                0,
+                                dp(5),
+                                0,
+                                0
+                            )
+                        },
+                        lp()
+                    )
+                }
+            }
+
+        wrapper.addView(
+            heading
+        )
+
+        val logo =
+            ImageView(this).apply {
+                setImageResource(
+                    R.drawable.ic_jarvis_logo
+                )
+                contentDescription =
+                    "Voice Jarvis"
+            }
+
+        wrapper.addView(
+            logo,
+            LinearLayout.LayoutParams(
+                dp(42),
+                dp(42)
+            )
+        )
+
+        return wrapper
+    }
+
+    private fun sectionTitle(
+        text: String,
+        accent: Int = cyan
+    ): TextView =
+        TextView(this).apply {
+            this.text = text
+            textSize = 12f
+            typeface =
+                Typeface.DEFAULT_BOLD
+            letterSpacing = 0.10f
+            setTextColor(accent)
+            setPadding(
+                dp(2),
+                dp(8),
+                0,
+                dp(8)
+            )
+        }
+
+    private fun miniOrb(): View =
+        ImageView(this).apply {
+
+            setImageResource(
+                R.drawable.ic_jarvis_logo
+            )
+
+            background =
+                surfaceBackground(
+                    elevated,
+                    24f,
+                    border
+                )
+
+            setPadding(
+                dp(10),
+                dp(10),
+                dp(10),
+                dp(10)
+            )
+
+            contentDescription =
+                "Jarvis"
+        }
+
+    private fun actionRow(
+        icon: Int,
+        title: String,
+        subtitle: String,
         accent: Int = cyan,
         onClick: (() -> Unit)? = null
     ): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20, 18, 20, 18)
-            background = rounded(card, border)
 
-            val titleView = TextView(this@JarvisScreensActivity).apply {
-                text = title
-                textSize = 16f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(white)
+        val row =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.HORIZONTAL
+
+                gravity =
+                    Gravity.CENTER_VERTICAL
+
+                setPadding(
+                    dp(14),
+                    dp(13),
+                    dp(12),
+                    dp(13)
+                )
+
+                background =
+                    surfaceBackground(
+                        surface,
+                        20f,
+                        border
+                    )
+
+                minimumHeight =
+                    dp(72)
             }
 
-            addView(titleView, lpWrap())
+        val iconView =
+            ImageView(this).apply {
 
-            subtitle?.let {
+                setImageResource(
+                    icon
+                )
+
+                setPadding(
+                    dp(10),
+                    dp(10),
+                    dp(10),
+                    dp(10)
+                )
+
+                background =
+                    surfaceBackground(
+                        elevated,
+                        18f,
+                        border
+                    )
+
+                imageTintList =
+                    android.content.res.ColorStateList.valueOf(
+                        accent
+                    )
+            }
+
+        row.addView(
+            iconView,
+            LinearLayout.LayoutParams(
+                dp(46),
+                dp(46)
+            )
+        )
+
+        val copy =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+
+                layoutParams =
+                    LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f
+                    ).apply {
+                        leftMargin = dp(12)
+                    }
+
                 addView(
                     TextView(this@JarvisScreensActivity).apply {
-                        text = it
-                        textSize = 13f
-                        setTextColor(secondary)
-                        setPadding(0, 7, 0, 0)
+                        text = title
+                        textSize = 15f
+                        typeface =
+                            Typeface.DEFAULT_BOLD
+                        setTextColor(white)
                     },
-                    lpWrap()
+                    lp()
+                )
+
+                addView(
+                    TextView(this@JarvisScreensActivity).apply {
+                        text = subtitle
+                        textSize = 13f
+                        setTextColor(
+                            secondary
+                        )
+                        setPadding(
+                            0,
+                            dp(4),
+                            0,
+                            0
+                        )
+                    },
+                    lp()
                 )
             }
 
-            if (onClick != null) {
-                isClickable = true
-                isFocusable = true
-                setOnClickListener { onClick() }
-                setBackgroundColor(card)
-            }
+        row.addView(copy)
 
-            if (accent != cyan) {
-                titleView.setTextColor(accent)
-            }
+        if (onClick != null) {
 
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = 12
+            row.addView(
+                ImageView(this).apply {
+                    setImageResource(
+                        R.drawable.ic_chevron
+                    )
+                    contentDescription =
+                        "Open"
+                },
+                LinearLayout.LayoutParams(
+                    dp(24),
+                    dp(24)
+                )
+            )
+
+            row.isClickable = true
+            row.isFocusable = true
+
+            row.setOnClickListener {
+                onClick()
             }
         }
+
+        return row
     }
 
     private fun primaryButton(
         text: String,
-        onClick: () -> Unit
-    ): Button {
-        return Button(this).apply {
+        onClick: () -> Unit,
+        accent: Int = cyan
+    ): Button =
+        Button(this).apply {
+
             this.text = text
+
             textSize = 13f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(bg)
-            background = rounded(cyan, cyan)
-            isAllCaps = true
-            setOnClickListener { onClick() }
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = 14
+            typeface =
+                Typeface.DEFAULT_BOLD
+            letterSpacing = 0.05f
+
+            setTextColor(
+                bg
+            )
+
+            background =
+                GradientDrawable().apply {
+                    setColor(accent)
+                    cornerRadius =
+                        dp(16).toFloat()
+                }
+
+            minimumHeight =
+                dp(52)
+
+            setOnClickListener {
+                onClick()
             }
         }
-    }
 
     private fun secondaryButton(
         text: String,
         onClick: () -> Unit
-    ): Button {
-        return Button(this).apply {
+    ): Button =
+        Button(this).apply {
+
             this.text = text
+
             textSize = 13f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(white)
-            background = rounded(card, border)
-            isAllCaps = true
-            setOnClickListener { onClick() }
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = 10
+            typeface =
+                Typeface.DEFAULT_BOLD
+
+            setTextColor(
+                white
+            )
+
+            background =
+                surfaceBackground(
+                    elevated,
+                    16f,
+                    border
+                )
+
+            minimumHeight =
+                dp(52)
+
+            setOnClickListener {
+                onClick()
             }
         }
-    }
 
-    private fun setRoot(view: View) {
-        setContentView(view)
-    }
+    private fun statusPill(
+        text: String,
+        color: Int
+    ): TextView =
+        TextView(this).apply {
 
-    private fun showHistory() {
-        val root = root()
-        backButton(root)
-        root.addView(title("CONVERSATION HISTORY", "Your recent Jarvis sessions."), lpWrap())
+            this.text = text
 
-        val search = EditText(this).apply {
-            hint = "Search conversations"
-            setHintTextColor(secondary)
-            setTextColor(white)
-            background = rounded(card, border)
-            setSingleLine(true)
-            setPadding(18, 0, 18, 0)
-        }
+            textSize = 11f
+            typeface =
+                Typeface.DEFAULT_BOLD
 
-        root.addView(
-            search,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                54.dp()
-            ).apply {
-                topMargin = 20
-                bottomMargin = 16
-            }
-        )
+            letterSpacing = 0.08f
 
-        val list = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
+            setTextColor(
+                color
+            )
 
-        root.addView(
-            ScrollView(this).apply {
-                addView(list)
-            },
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0
-            ).apply {
-                weight = 1f
-            }
-        )
-
-        setRoot(root)
-
-        FirebaseManager.initialize(this) {
-            val uid = FirebaseManager.getUserId()
-
-            if (uid == null) {
-                runOnUiThread {
-                    list.addView(
-                        card(
-                            "FIREBASE UNAVAILABLE",
-                            "History will appear when Firebase authentication is ready.",
-                            red
+            background =
+                GradientDrawable().apply {
+                    setColor(
+                        Color.argb(
+                            28,
+                            Color.red(color),
+                            Color.green(color),
+                            Color.blue(color)
+                        )
+                    )
+                    cornerRadius =
+                        dp(20).toFloat()
+                    setStroke(
+                        dp(1),
+                        Color.argb(
+                            65,
+                            Color.red(color),
+                            Color.green(color),
+                            Color.blue(color)
                         )
                     )
                 }
+
+            setPadding(
+                dp(10),
+                dp(6),
+                dp(10),
+                dp(6)
+            )
+        }
+
+    private fun showHistory() {
+
+        val page =
+            root()
+
+        val body =
+            content(page)
+
+        body.addView(
+            header(
+                "History",
+                "Your recent Jarvis sessions."
+            ),
+            lp(
+                top = 2,
+                bottom = 14
+            )
+        )
+
+        val searchContainer =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.HORIZONTAL
+
+                gravity =
+                    Gravity.CENTER_VERTICAL
+
+                background =
+                    surfaceBackground(
+                        surface,
+                        18f,
+                        border
+                    )
+
+                setPadding(
+                    dp(12),
+                    0,
+                    dp(12),
+                    0
+                )
+            }
+
+        searchContainer.addView(
+            ImageView(this).apply {
+                setImageResource(
+                    R.drawable.ic_search
+                )
+                contentDescription =
+                    "Search"
+            },
+            LinearLayout.LayoutParams(
+                dp(26),
+                dp(26)
+            )
+        )
+
+        val search =
+            EditText(this).apply {
+
+                hint =
+                    "Search conversations"
+
+                textSize =
+                    15f
+
+                setTextColor(
+                    white
+                )
+
+                setHintTextColor(
+                    tertiary
+                )
+
+                setSingleLine(true)
+
+                background =
+                    null
+
+                layoutParams =
+                    LinearLayout.LayoutParams(
+                        0,
+                        dp(54),
+                        1f
+                    ).apply {
+                        leftMargin = dp(8)
+                    }
+            }
+
+        searchContainer.addView(
+            search
+        )
+
+        body.addView(
+            searchContainer,
+            lp(
+                bottom = 16
+            )
+        )
+
+        val list =
+            LinearLayout(this).apply {
+                orientation =
+                    LinearLayout.VERTICAL
+            }
+
+        body.addView(
+            list
+        )
+
+        search.addTextChangedListener(
+            object : TextWatcher {
+
+                override fun beforeTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    count: Int,
+                    after: Int
+                ) = Unit
+
+                override fun onTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    before: Int,
+                    count: Int
+                ) {
+                    renderHistory(
+                        list,
+                        s?.toString()
+                            ?.trim()
+                            ?.lowercase()
+                            ?: ""
+                    )
+                }
+
+                override fun afterTextChanged(
+                    s: Editable?
+                ) = Unit
+            }
+        )
+
+        setContentView(
+            page
+        )
+
+        loadConversations(
+            list
+        )
+    }
+
+    private fun loadConversations(
+        list: LinearLayout
+    ) {
+
+        FirebaseManager.initialize(this) {
+
+            val uid =
+                FirebaseManager.getUserId()
+
+            if (uid == null) {
+
+                runOnUiThread {
+                    list.removeAllViews()
+                    list.addView(
+                        emptyState(
+                            R.drawable.ic_jarvis_logo,
+                            "HISTORY UNAVAILABLE",
+                            "Jarvis hasn't connected to Firebase yet.",
+                            red
+                        ),
+                        lp(bottom = 10)
+                    )
+                }
+
                 return@initialize
             }
 
-            com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            FirebaseFirestore
+                .getInstance()
                 .collection("users")
                 .document(uid)
                 .collection("conversations")
-                .orderBy("startedAt", Query.Direction.DESCENDING)
+                .orderBy(
+                    "startedAt",
+                    Query.Direction.DESCENDING
+                )
                 .limit(50)
                 .get()
                 .addOnSuccessListener { snapshot ->
-                    runOnUiThread {
-                        list.removeAllViews()
 
-                        if (snapshot.isEmpty) {
-                            list.addView(
-                                card(
-                                    "NO CONVERSATIONS YET",
-                                    "Start talking to Jarvis and your sessions will appear here.",
-                                    violet
+                    conversations.clear()
+
+                    snapshot.documents
+                        .forEach { doc ->
+
+                            val timestamp =
+                                doc.getTimestamp(
+                                    "startedAt"
+                                )?.toDate()
+
+                            conversations.add(
+                                ConversationRow(
+                                    id = doc.id,
+                                    source =
+                                        doc.getString(
+                                            "source"
+                                        ) ?: "voice",
+                                    startedAt =
+                                        timestamp,
+                                    preview =
+                                        "Voice conversation with Jarvis"
                                 )
                             )
+                        }
+
+                    runOnUiThread {
+                        renderHistory(
+                            list
+                        )
+                    }
+                }
+                .addOnFailureListener { error ->
+
+                    runOnUiThread {
+
+                        list.removeAllViews()
+
+                        list.addView(
+                            emptyState(
+                                R.drawable.ic_history,
+                                "HISTORY ERROR",
+                                error.message
+                                    ?: "Unable to load history.",
+                                red
+                            ),
+                            lp(bottom = 10)
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun renderHistory(
+        list: LinearLayout,
+        query: String = ""
+    ) {
+
+        list.removeAllViews()
+
+        val filtered =
+            if (query.isBlank()) {
+                conversations
+            } else {
+                conversations.filter {
+                    it.source
+                        .lowercase()
+                        .contains(query) ||
+                    it.preview
+                        .lowercase()
+                        .contains(query)
+                }
+            }
+
+        if (filtered.isEmpty()) {
+
+            list.addView(
+                emptyState(
+                    R.drawable.ic_history,
+                    if (query.isBlank())
+                        "NO CONVERSATIONS YET"
+                    else
+                        "NO RESULTS",
+                    if (query.isBlank())
+                        "Your conversations with Jarvis will appear here."
+                    else
+                        "Try a different word or phrase.",
+                    violet
+                ),
+                lp(bottom = 12)
+            )
+
+            list.addView(
+                primaryButton(
+                    "START A CONVERSATION",
+                    {
+                        finish()
+                    }
+                ),
+                lp(
+                    bottom = 10
+                )
+            )
+
+            return
+        }
+
+        var lastDate =
+            ""
+
+        filtered.forEach { row ->
+
+            val dateKey =
+                row.startedAt?.let {
+                    SimpleDateFormat(
+                        "d MMM yyyy",
+                        Locale.getDefault()
+                    ).format(it)
+                } ?: "Recent"
+
+            if (dateKey != lastDate) {
+
+                list.addView(
+                    sectionTitle(
+                        dateKey
+                    ),
+                    lp(
+                        top = 4,
+                        bottom = 2
+                    )
+                )
+
+                lastDate = dateKey
+            }
+
+            val card =
+                LinearLayout(this).apply {
+
+                    orientation =
+                        LinearLayout.HORIZONTAL
+
+                    gravity =
+                        Gravity.CENTER_VERTICAL
+
+                    setPadding(
+                        dp(12),
+                        dp(12),
+                        dp(12),
+                        dp(12)
+                    )
+
+                    background =
+                        surfaceBackground(
+                            surface,
+                            20f,
+                            border
+                        )
+
+                    setOnClickListener {
+
+                        startActivity(
+                            Intent(
+                                this@JarvisScreensActivity,
+                                JarvisScreensActivity::class.java
+                            ).apply {
+
+                                putExtra(
+                                    ROUTE,
+                                    DETAIL
+                                )
+
+                                putExtra(
+                                    CONVERSATION_ID,
+                                    row.id
+                                )
+                            }
+                        )
+                    }
+                }
+
+            card.addView(
+                miniOrb(),
+                LinearLayout.LayoutParams(
+                    dp(46),
+                    dp(46)
+                )
+            )
+
+            val copy =
+                LinearLayout(this).apply {
+                    orientation =
+                        LinearLayout.VERTICAL
+
+                    layoutParams =
+                        LinearLayout.LayoutParams(
+                            0,
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            1f
+                        ).apply {
+                            leftMargin =
+                                dp(12)
+                        }
+
+                    addView(
+                        TextView(this@JarvisScreensActivity).apply {
+                            text =
+                                row.source
+                                    .uppercase(
+                                        Locale.getDefault()
+                                    )
+                            textSize =
+                                11f
+                            typeface =
+                                Typeface.DEFAULT_BOLD
+                            letterSpacing =
+                                0.08f
+                            setTextColor(
+                                cyan
+                            )
+                        },
+                        lp()
+                    )
+
+                    addView(
+                        TextView(this@JarvisScreensActivity).apply {
+                            text =
+                                row.preview
+                            textSize =
+                                14f
+                            setTextColor(
+                                white
+                            )
+                            setPadding(
+                                0,
+                                dp(4),
+                                0,
+                                0
+                            )
+                        },
+                        lp()
+                    )
+
+                    addView(
+                        TextView(this@JarvisScreensActivity).apply {
+                            text =
+                                row.startedAt?.let {
+                                    compactTime.format(it)
+                                } ?: "—"
+                            textSize =
+                                11f
+                            setTextColor(
+                                tertiary
+                            )
+                            setPadding(
+                                0,
+                                dp(4),
+                                0,
+                                0
+                            )
+                        },
+                        lp()
+                    )
+                }
+
+            card.addView(copy)
+
+            card.addView(
+                ImageView(this).apply {
+                    setImageResource(
+                        R.drawable.ic_chevron
+                    )
+                    contentDescription =
+                        "Open conversation"
+                },
+                LinearLayout.LayoutParams(
+                    dp(24),
+                    dp(24)
+                )
+            )
+
+            list.addView(
+                card,
+                lp(
+                    bottom = 10
+                )
+            )
+        }
+    }
+
+    private fun showConversationDetail(
+        conversationId: String?
+    ) {
+
+        if (
+            conversationId.isNullOrBlank()
+        ) {
+
+            finish()
+            return
+        }
+
+        val page =
+            root()
+
+        val body =
+            content(page)
+
+        body.addView(
+            header(
+                "Conversation",
+                "Memory playback"
+            ),
+            lp(
+                bottom = 16
+            )
+        )
+
+        val titleRow =
+            LinearLayout(this).apply {
+                orientation =
+                    LinearLayout.HORIZONTAL
+                gravity =
+                    Gravity.CENTER_VERTICAL
+            }
+
+        titleRow.addView(
+            statusPill(
+                "VOICE SESSION",
+                cyan
+            ),
+            lp(
+                width = ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        titleRow.addView(
+            TextView(this).apply {
+                text =
+                    "  Today"
+                textSize =
+                    12f
+                setTextColor(
+                    tertiary
+                )
+            }
+        )
+
+        body.addView(
+            titleRow,
+            lp(
+                bottom = 16
+            )
+        )
+
+        val transcript =
+            LinearLayout(this).apply {
+                orientation =
+                    LinearLayout.VERTICAL
+            }
+
+        body.addView(
+            transcript
+        )
+
+        setContentView(
+            page
+        )
+
+        FirebaseManager.initialize(this) {
+
+            val uid =
+                FirebaseManager.getUserId()
+                    ?: return@initialize
+
+            FirebaseFirestore
+                .getInstance()
+                .collection("users")
+                .document(uid)
+                .collection("conversations")
+                .document(conversationId)
+                .collection("turns")
+                .orderBy(
+                    "createdAt",
+                    Query.Direction.ASCENDING
+                )
+                .limit(100)
+                .get()
+                .addOnSuccessListener { snapshot ->
+
+                    runOnUiThread {
+
+                        transcript.removeAllViews()
+
+                        if (snapshot.isEmpty) {
+
+                            transcript.addView(
+                                emptyState(
+                                    R.drawable.ic_jarvis_logo,
+                                    "NO TRANSCRIPT",
+                                    "This session has no stored transcript.",
+                                    tertiary
+                                ),
+                                lp()
+                            )
+
                             return@runOnUiThread
                         }
 
                         snapshot.documents.forEach { doc ->
-                            val id = doc.id
-                            val source = doc.getString("source") ?: "voice"
 
-                            list.addView(
-                                card(
-                                    "VOICE SESSION",
-                                    "$source  •  $id",
-                                    cyan
+                            val user =
+                                doc.getString(
+                                    "userTranscript"
                                 )
-                            )
+
+                            val jarvis =
+                                doc.getString(
+                                    "assistantTranscript"
+                                )
+
+                            user?.takeIf {
+                                it.isNotBlank()
+                            }?.let {
+
+                                transcript.addView(
+                                    messageCard(
+                                        "YOU",
+                                        it,
+                                        blue
+                                    ),
+                                    lp(
+                                        bottom = 10
+                                    )
+                                )
+                            }
+
+                            jarvis?.takeIf {
+                                it.isNotBlank()
+                            }?.let {
+
+                                transcript.addView(
+                                    assistantMessageCard(
+                                        it
+                                    ),
+                                    lp(
+                                        bottom = 10
+                                    )
+                                )
+                            }
                         }
-                    }
-                }
-                .addOnFailureListener { error ->
-                    runOnUiThread {
-                        list.addView(
-                            card(
-                                "HISTORY ERROR",
-                                error.message ?: "Unable to load history.",
-                                red
-                            )
-                        )
                     }
                 }
         }
     }
 
-    private fun showSettings() {
-        val root = root()
-        backButton(root)
-        root.addView(title("SETTINGS", "Control Jarvis behaviour, privacy and permissions."), lpWrap())
+    private fun messageCard(
+        role: String,
+        text: String,
+        accent: Int
+    ): LinearLayout {
 
-        val telemetry = Switch(this).apply {
-            text = "Improve Jarvis"
-            textSize = 16f
-            setTextColor(white)
-            isChecked = FirebaseManager.isTelemetryEnabled()
-            setOnCheckedChangeListener { _, checked ->
-                FirebaseManager.setTelemetryEnabled(checked)
+        val box =
+            LinearLayout(this).apply {
+                orientation =
+                    LinearLayout.VERTICAL
+
+                setPadding(
+                    dp(16),
+                    dp(14),
+                    dp(16),
+                    dp(14)
+                )
+
+                background =
+                    surfaceBackground(
+                        surface,
+                        20f,
+                        border
+                    )
             }
-        }
 
-        root.addView(
-            card(
-                "LEARNING TELEMETRY",
-                "Stores cleaned transcripts, latency and quality signals. Raw microphone audio is not uploaded.",
-                cyan
-            ).apply {
-                addView(telemetry, lpWrap().apply {
-                    topMargin = 12
-                })
+        box.addView(
+            TextView(this).apply {
+                this.text =
+                    role
+                textSize =
+                    11f
+                typeface =
+                    Typeface.DEFAULT_BOLD
+                letterSpacing =
+                    0.08f
+                setTextColor(
+                    accent
+                )
             },
-            lpWrap()
+            lp()
         )
 
-        root.addView(
-            card(
-                "VOICE",
-                "Gemini Live • Aoede • Real-time voice"
-            ),
-            lpWrap()
+        box.addView(
+            TextView(this).apply {
+                this.text =
+                    text
+                textSize =
+                    16f
+                setTextColor(
+                    white
+                )
+                setPadding(
+                    0,
+                    dp(8),
+                    0,
+                    0
+                )
+            },
+            lp()
         )
 
-        root.addView(
-            card(
-                "MICROPHONE",
-                "Manage microphone permission",
+        return box
+    }
+
+    private fun assistantMessageCard(
+        text: String
+    ): LinearLayout {
+
+        val card =
+            messageCard(
+                "JARVIS",
+                text,
                 cyan
+            )
+
+        val replay =
+            TextView(this).apply {
+
+                text =
+                    "  ▶  Replay response"
+
+                textSize =
+                    12f
+                typeface =
+                    Typeface.DEFAULT_BOLD
+                setTextColor(
+                    cyan
+                )
+
+                setPadding(
+                    0,
+                    dp(14),
+                    0,
+                    0
+                )
+
+                setOnClickListener {
+
+                    Toast.makeText(
+                        this@JarvisScreensActivity,
+                        "Replay uses the current Jarvis voice pipeline.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+
+        card.addView(
+            replay,
+            lp()
+        )
+
+        return card
+    }
+
+    private fun showSettings() {
+
+        val page =
+            root()
+
+        val body =
+            content(page)
+
+        body.addView(
+            header(
+                "Settings",
+                "Your Jarvis control room."
+            ),
+            lp(
+                bottom = 14
+            )
+        )
+
+        body.addView(
+            sectionTitle(
+                "ASSISTANT"
+            ),
+            lp()
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Language",
+                "English • বাংলা • हिंदी • Hinglish",
+                cyan
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_mic,
+                "Voice",
+                "Aoede • Gemini Live • Real-time",
+                cyan
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_mic,
+                "Wake Word",
+                "Hey Jarvis • Always listening",
+                violet
+            ),
+            lp(
+                bottom = 18
+            )
+        )
+
+        body.addView(
+            sectionTitle(
+                "PERMISSIONS",
+                violet
+            ),
+            lp()
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_mic,
+                "Microphone",
+                "Voice input and conversation",
+                red
             ) {
                 openRoute(MICROPHONE)
             },
-            lpWrap()
+            lp(
+                bottom = 10
+            )
         )
 
-        root.addView(
-            card(
-                "CALL & SMS",
-                "Manage communication permissions",
-                violet
+        body.addView(
+            actionRow(
+                R.drawable.ic_phone,
+                "Calls",
+                "Call control and phone actions",
+                green
             ) {
                 openRoute(CALL)
             },
-            lpWrap()
+            lp(
+                bottom = 10
+            )
         )
 
-        root.addView(
-            card(
-                "NOTIFICATIONS",
-                "Allow Jarvis notifications",
-                green
+        body.addView(
+            actionRow(
+                R.drawable.ic_message,
+                "SMS / Messaging",
+                "Messages and communication",
+                blue
+            ) {
+                openRoute(SMS)
+            },
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_bell,
+                "Notifications",
+                "Read and manage notifications",
+                orange
             ) {
                 openRoute(NOTIFICATION)
             },
-            lpWrap()
+            lp(
+                bottom = 10
+            )
         )
 
-        root.addView(
-            card(
-                "ACCESSIBILITY",
-                "Enable screen automation and UI control",
+        body.addView(
+            actionRow(
+                R.drawable.ic_accessibility,
+                "Accessibility",
+                "Screen automation and device control",
                 violet
             ) {
                 openRoute(ACCESSIBILITY)
             },
-            lpWrap()
+            lp(
+                bottom = 18
+            )
         )
 
-        root.addView(
-            card(
-                "ABOUT",
-                "VOICE JARVIS V1 • Web With Roni"
+        body.addView(
+            sectionTitle(
+                "PRIVACY",
+                green
             ),
-            lpWrap()
+            lp()
         )
 
-        setRoot(
-            ScrollView(this).apply {
-                addView(root)
+        val telemetry =
+            Switch(this).apply {
+
+                text =
+                    "Improve Jarvis"
+
+                textSize =
+                    15f
+
+                setTextColor(
+                    white
+                )
+
+                isChecked =
+                    FirebaseManager
+                        .isTelemetryEnabled()
+
+                setOnCheckedChangeListener { _, checked ->
+
+                    FirebaseManager
+                        .setTelemetryEnabled(
+                            checked
+                        )
+                }
             }
+
+        val telemetryCard =
+            LinearLayout(this).apply {
+                orientation =
+                    LinearLayout.VERTICAL
+
+                setPadding(
+                    dp(16),
+                    dp(14),
+                    dp(16),
+                    dp(14)
+                )
+
+                background =
+                    surfaceBackground(
+                        surface,
+                        20f,
+                        border
+                    )
+
+                addView(
+                    TextView(this@JarvisScreensActivity).apply {
+                        text =
+                            "LEARNING TELEMETRY"
+                        textSize =
+                            12f
+                        typeface =
+                            Typeface.DEFAULT_BOLD
+                        setTextColor(
+                            cyan
+                        )
+                    }
+                )
+
+                addView(
+                    TextView(this@JarvisScreensActivity).apply {
+                        text =
+                            "Stores cleaned transcripts, latency and quality signals. Raw microphone audio is never uploaded here."
+                        textSize =
+                            13f
+                        setTextColor(
+                            secondary
+                        )
+                        setPadding(
+                            0,
+                            dp(6),
+                            0,
+                            dp(4)
+                        )
+                    }
+                )
+
+                addView(
+                    telemetry
+                )
+            }
+
+        body.addView(
+            telemetryCard,
+            lp(
+                bottom = 18
+            )
+        )
+
+        body.addView(
+            sectionTitle(
+                "ABOUT",
+                tertiary
+            ),
+            lp()
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Voice Jarvis",
+                "V1 • Web With Roni • Android",
+                cyan
+            ),
+            lp(
+                bottom = 8
+            )
+        )
+
+        body.addView(
+            TextView(this).apply {
+
+                text =
+                    "Voice-first intelligence for your device."
+
+                textSize =
+                    12f
+
+                setTextColor(
+                    tertiary
+                )
+
+                gravity =
+                    Gravity.CENTER
+
+                setPadding(
+                    0,
+                    dp(16),
+                    0,
+                    0
+                )
+            },
+            lp()
+        )
+
+        setContentView(
+            page
         )
     }
 
     private fun showOnboarding() {
-        val root = root()
-        root.gravity = Gravity.CENTER_HORIZONTAL
 
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-        }
+        val page =
+            root()
 
-        content.addView(
-            TextView(this).apply {
-                text = "VOICE JARVIS"
-                textSize = 30f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(white)
-            },
-            lpWrap()
+        val body =
+            content(page)
+
+        body.gravity =
+            Gravity.CENTER_HORIZONTAL
+
+        val logo =
+            ImageView(this).apply {
+
+                setImageResource(
+                    R.drawable.ic_jarvis_logo
+                )
+
+                setPadding(
+                    dp(20),
+                    dp(20),
+                    dp(20),
+                    dp(20)
+                )
+
+                background =
+                    surfaceBackground(
+                        elevated,
+                        42f,
+                        border
+                    )
+            }
+
+        body.addView(
+            Space(this),
+            LinearLayout.LayoutParams(
+                1,
+                dp(60)
+            )
         )
 
-        content.addView(
-            TextView(this).apply {
-                text = "YOUR REAL-TIME ANDROID ASSISTANT"
-                textSize = 12f
-                setTextColor(cyan)
-                letterSpacing = 0.12f
-                setPadding(0, 10, 0, 30)
-            },
-            lpWrap()
+        body.addView(
+            logo,
+            LinearLayout.LayoutParams(
+                dp(118),
+                dp(118)
+            ).apply {
+                gravity =
+                    Gravity.CENTER_HORIZONTAL
+            }
         )
 
-        content.addView(
-            card(
-                "1  MICROPHONE",
-                "Speak naturally with Jarvis.",
+        body.addView(
+            TextView(this).apply {
+                text =
+                    "MEET JARVIS"
+                textSize =
+                    28f
+                typeface =
+                    Typeface.DEFAULT_BOLD
+                letterSpacing =
+                    0.04f
+                setTextColor(
+                    white
+                )
+                gravity =
+                    Gravity.CENTER
+            },
+            lp(
+                top = 28
+            )
+        )
+
+        body.addView(
+            TextView(this).apply {
+                text =
+                    "A living voice-first assistant for your Android device."
+                textSize =
+                    15f
+                setTextColor(
+                    secondary
+                )
+                gravity =
+                    Gravity.CENTER
+                setPadding(
+                    dp(18),
+                    dp(10),
+                    dp(18),
+                    0
+                )
+            },
+            lp()
+        )
+
+        body.addView(
+            sectionTitle(
+                "TALK NATURALLY"
+            ),
+            lp(
+                top = 34
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_mic,
+                "Speak naturally",
+                "English, Bengali, Hindi or mixed speech.",
                 cyan
-            ) {
-                openRoute(MICROPHONE)
-            },
-            lpWrap()
+            ),
+            lp(
+                bottom = 10
+            )
         )
 
-        content.addView(
-            card(
-                "2  NOTIFICATIONS",
-                "Let Jarvis surface important events.",
-                green
-            ) {
-                openRoute(NOTIFICATION)
-            },
-            lpWrap()
-        )
-
-        content.addView(
-            card(
-                "3  ACCESSIBILITY",
-                "Enable advanced screen control.",
+        body.addView(
+            actionRow(
+                R.drawable.ic_accessibility,
+                "You stay in control",
+                "Jarvis explains sensitive permissions before asking.",
                 violet
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            primaryButton(
+                "START JARVIS",
+                {
+                    openRoute(
+                        MICROPHONE
+                    )
+                }
+            ),
+            lp(
+                top = 20,
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            secondaryButton(
+                "SKIP TO HOME"
             ) {
-                openRoute(ACCESSIBILITY)
+                finish()
             },
-            lpWrap()
+            lp()
         )
 
-        content.addView(
-            primaryButton("ENTER JARVIS", ::finish),
-            lpWrap()
+        setContentView(
+            page
         )
-
-        root.addView(
-            Space(this),
-            LinearLayout.LayoutParams(1, 0, 1f)
-        )
-
-        root.addView(content, lpWrap())
-
-        root.addView(
-            Space(this),
-            LinearLayout.LayoutParams(1, 0, 1f)
-        )
-
-        setRoot(root)
     }
 
     private fun showPermission(
         title: String,
+        subtitle: String,
         description: String,
+        icon: Int,
+        color: Int,
         permission: String
     ) {
-        val root = root()
-        backButton(root)
-        root.addView(title(title, "Permission center"), lpWrap())
+
+        val page =
+            root()
+
+        val body =
+            content(page)
+
+        body.gravity =
+            Gravity.CENTER_HORIZONTAL
+
+        body.addView(
+            header(
+                title,
+                subtitle
+            ),
+            lp(
+                bottom = 26
+            )
+        )
+
+        val iconView =
+            ImageView(this).apply {
+
+                setImageResource(
+                    icon
+                )
+
+                imageTintList =
+                    android.content.res.ColorStateList.valueOf(
+                        color
+                    )
+
+                background =
+                    surfaceBackground(
+                        elevated,
+                        48f,
+                        border
+                    )
+
+                setPadding(
+                    dp(24),
+                    dp(24),
+                    dp(24),
+                    dp(24)
+                )
+            }
+
+        body.addView(
+            iconView,
+            LinearLayout.LayoutParams(
+                dp(118),
+                dp(118)
+            ).apply {
+                gravity =
+                    Gravity.CENTER_HORIZONTAL
+            }
+        )
 
         val granted =
             ContextCompat.checkSelfPermission(
                 this,
                 permission
-            ) == PackageManager.PERMISSION_GRANTED
+            ) ==
+                PackageManager.PERMISSION_GRANTED
 
-        root.addView(
-            card(
-                if (granted) "ENABLED" else "REQUIRED",
-                description,
-                if (granted) green else red
+        body.addView(
+            statusPill(
+                if (granted)
+                    "ENABLED"
+                else
+                    "PERMISSION NEEDED",
+                if (granted)
+                    green
+                else
+                    color
             ),
-            lpWrap()
+            lp(
+                width =
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                top = 22,
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            TextView(this).apply {
+
+                text =
+                    description
+
+                textSize =
+                    15f
+
+                setTextColor(
+                    secondary
+                )
+
+                gravity =
+                    Gravity.CENTER
+
+                setPadding(
+                    dp(14),
+                    0,
+                    dp(14),
+                    0
+                )
+            },
+            lp(
+                bottom = 14
+            )
         )
 
         if (granted) {
-            root.addView(
-                primaryButton("ENABLED", ::finish),
-                lpWrap()
+
+            body.addView(
+                primaryButton(
+                    "ENABLED",
+                    ::finish,
+                    green
+                ),
+                lp(
+                    bottom = 10
+                )
             )
+
         } else {
-            root.addView(
-                primaryButton("ENABLE", ::requestPermission),
-                lpWrap()
+
+            body.addView(
+                primaryButton(
+                    "ENABLE",
+                    {
+                        ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(
+                                permission
+                            ),
+                            REQUEST_PERMISSION
+                        )
+                    },
+                    color
+                ),
+                lp(
+                    bottom = 10
+                )
             )
         }
 
-        root.addView(
+        body.addView(
             secondaryButton(
                 "OPEN APP SETTINGS"
             ) {
+
                 startActivity(
                     Intent(
                         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:$packageName")
+                        Uri.parse(
+                            "package:$packageName"
+                        )
                     )
                 )
             },
-            lpWrap()
+            lp()
         )
 
-        setRoot(root)
-    }
-
-    private fun requestPermission() {
-        val route = intent.getStringExtra(ROUTE)
-
-        val permission = when (route) {
-            MICROPHONE -> Manifest.permission.RECORD_AUDIO
-            CALL -> Manifest.permission.CALL_PHONE
-            SMS -> Manifest.permission.SEND_SMS
-            else -> null
-        } ?: return
-
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(permission),
-            REQUEST_PERMISSION
+        setContentView(
+            page
         )
     }
 
     private fun showNotificationPermission() {
-        val root = root()
-        backButton(root)
-        root.addView(title("NOTIFICATIONS", "Jarvis notifications"), lpWrap())
+
+        val page =
+            root()
+
+        val body =
+            content(page)
+
+        body.gravity =
+            Gravity.CENTER_HORIZONTAL
+
+        body.addView(
+            header(
+                "NOTIFICATIONS",
+                "Quiet awareness for Jarvis."
+            ),
+            lp(
+                bottom = 26
+            )
+        )
+
+        body.addView(
+            ImageView(this).apply {
+
+                setImageResource(
+                    R.drawable.ic_bell
+                )
+
+                background =
+                    surfaceBackground(
+                        elevated,
+                        48f,
+                        border
+                    )
+
+                setPadding(
+                    dp(24),
+                    dp(24),
+                    dp(24),
+                    dp(24)
+                )
+            },
+            LinearLayout.LayoutParams(
+                dp(118),
+                dp(118)
+            )
+        )
 
         val granted =
-            if (Build.VERSION.SDK_INT >= 33) {
+            if (
+                Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.TIRAMISU
+            ) {
                 ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
+                ) ==
+                    PackageManager.PERMISSION_GRANTED
             } else {
                 true
             }
 
-        root.addView(
-            card(
-                if (granted) "ENABLED" else "REQUIRED",
-                "Notifications are used for reminders, missions and important Jarvis events.",
-                if (granted) green else red
+        body.addView(
+            statusPill(
+                if (granted)
+                    "ENABLED"
+                else
+                    "PERMISSION NEEDED",
+                if (granted)
+                    green
+                else
+                    orange
             ),
-            lpWrap()
+            lp(
+                width =
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                top = 22,
+                bottom = 12
+            )
         )
 
-        if (Build.VERSION.SDK_INT >= 33 && !granted) {
-            root.addView(
-                primaryButton("ENABLE NOTIFICATIONS") {
-                    ActivityCompat.requestPermissions(
-                        this,
-                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                        REQUEST_PERMISSION
-                    )
-                },
-                lpWrap()
+        body.addView(
+            TextView(this).apply {
+
+                text =
+                    "Notifications let Jarvis surface reminders, task updates and important events without becoming noisy."
+
+                textSize =
+                    15f
+
+                setTextColor(
+                    secondary
+                )
+
+                gravity =
+                    Gravity.CENTER
+            },
+            lp(
+                bottom = 16
+            )
+        )
+
+        if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.TIRAMISU &&
+            !granted
+        ) {
+
+            body.addView(
+                primaryButton(
+                    "ENABLE NOTIFICATIONS",
+                    {
+                        ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(
+                                Manifest.permission.POST_NOTIFICATIONS
+                            ),
+                            REQUEST_PERMISSION
+                        )
+                    },
+                    orange
+                ),
+                lp(
+                    bottom = 10
+                )
             )
         }
 
-        root.addView(
-            secondaryButton("OPEN NOTIFICATION SETTINGS") {
+        body.addView(
+            secondaryButton(
+                "OPEN NOTIFICATION SETTINGS"
+            ) {
+
                 startActivity(
-                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    Intent(
+                        Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                    ).apply {
                         putExtra(
                             Settings.EXTRA_APP_PACKAGE,
                             packageName
@@ -629,82 +2175,301 @@ class JarvisScreensActivity : AppCompatActivity() {
                     }
                 )
             },
-            lpWrap()
+            lp()
         )
 
-        setRoot(root)
+        setContentView(
+            page
+        )
     }
 
     private fun showAccessibilityPermission() {
-        val root = root()
-        backButton(root)
-        root.addView(title("ACCESSIBILITY", "Screen automation"), lpWrap())
 
-        root.addView(
-            card(
-                "ACCESSIBILITY SERVICE",
-                "Required for reading screens, tapping elements, typing and navigating apps.",
-                violet
+        val page =
+            root()
+
+        val body =
+            content(page)
+
+        body.gravity =
+            Gravity.CENTER_HORIZONTAL
+
+        body.addView(
+            header(
+                "ACCESSIBILITY",
+                "Jarvis's device-control bridge."
             ),
-            lpWrap()
+            lp(
+                bottom = 26
+            )
         )
 
-        root.addView(
-            primaryButton("OPEN ACCESSIBILITY SETTINGS") {
-                startActivity(
-                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        body.addView(
+            ImageView(this).apply {
+
+                setImageResource(
+                    R.drawable.ic_accessibility
+                )
+
+                background =
+                    surfaceBackground(
+                        elevated,
+                        48f,
+                        border
+                    )
+
+                setPadding(
+                    dp(24),
+                    dp(24),
+                    dp(24),
+                    dp(24)
                 )
             },
-            lpWrap()
+            LinearLayout.LayoutParams(
+                dp(118),
+                dp(118)
+            )
         )
 
-        root.addView(
-            secondaryButton("DONE", ::finish),
-            lpWrap()
+        val enabled =
+            VoiceJarvisAccessibilityService
+                .isEnabled(
+                    this
+                )
+
+        body.addView(
+            statusPill(
+                if (enabled)
+                    "ACCESS ENABLED"
+                else
+                    "SETUP REQUIRED",
+                if (enabled)
+                    green
+                else
+                    violet
+            ),
+            lp(
+                width =
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                top = 22,
+                bottom = 12
+            )
         )
 
-        setRoot(root)
+        body.addView(
+            TextView(this).apply {
+
+                text =
+                    "Accessibility access allows Jarvis to inspect visible UI, tap elements, type text and perform gestures across supported Android apps."
+
+                textSize =
+                    15f
+
+                setTextColor(
+                    secondary
+                )
+
+                gravity =
+                    Gravity.CENTER
+            },
+            lp(
+                bottom = 16
+            )
+        )
+
+        body.addView(
+            primaryButton(
+                if (enabled)
+                    "OPEN ACCESSIBILITY SETTINGS"
+                else
+                    "OPEN ACCESSIBILITY SETTINGS",
+                {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_ACCESSIBILITY_SETTINGS
+                        )
+                    )
+                },
+                violet
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            secondaryButton(
+                "WHY DOES JARVIS NEED THIS?"
+            ) {
+
+                Toast.makeText(
+                    this,
+                    "It is required for screen automation and device-control workflows.",
+                    Toast.LENGTH_LONG
+                ).show()
+            },
+            lp()
+        )
+
+        setContentView(
+            page
+        )
     }
 
-    private fun openRoute(route: String) {
+    private fun emptyState(
+        icon: Int,
+        title: String,
+        subtitle: String,
+        accent: Int
+    ): LinearLayout {
+
+        val box =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+
+                gravity =
+                    Gravity.CENTER_HORIZONTAL
+
+                setPadding(
+                    dp(24),
+                    dp(28),
+                    dp(24),
+                    dp(28)
+                )
+
+                background =
+                    surfaceBackground(
+                        surface,
+                        22f,
+                        border
+                    )
+            }
+
+        box.addView(
+            ImageView(this).apply {
+
+                setImageResource(
+                    icon
+                )
+
+                setPadding(
+                    dp(18),
+                    dp(18),
+                    dp(18),
+                    dp(18)
+                )
+
+                background =
+                    surfaceBackground(
+                        elevated,
+                        32f,
+                        border
+                    )
+            },
+            LinearLayout.LayoutParams(
+                dp(74),
+                dp(74)
+            )
+        )
+
+        box.addView(
+            TextView(this).apply {
+
+                text =
+                    title
+
+                textSize =
+                    15f
+
+                typeface =
+                    Typeface.DEFAULT_BOLD
+
+                letterSpacing =
+                    0.06f
+
+                setTextColor(
+                    accent
+                )
+
+                gravity =
+                    Gravity.CENTER
+
+                setPadding(
+                    0,
+                    dp(16),
+                    0,
+                    0
+                )
+            },
+            lp()
+        )
+
+        box.addView(
+            TextView(this).apply {
+
+                text =
+                    subtitle
+
+                textSize =
+                    14f
+
+                setTextColor(
+                    secondary
+                )
+
+                gravity =
+                    Gravity.CENTER
+
+                setPadding(
+                    0,
+                    dp(8),
+                    0,
+                    0
+                )
+            },
+            lp()
+        )
+
+        return box
+    }
+
+    private fun openRoute(
+        route: String
+    ) {
+
         startActivity(
-            Intent(this, JarvisScreensActivity::class.java).apply {
-                putExtra(ROUTE, route)
+            Intent(
+                this,
+                JarvisScreensActivity::class.java
+            ).apply {
+                putExtra(
+                    ROUTE,
+                    route
+                )
             }
         )
     }
-
-    private fun rounded(fill: Int, stroke: Int): android.graphics.drawable.GradientDrawable {
-        return android.graphics.drawable.GradientDrawable().apply {
-            setColor(fill)
-            setStroke(1, stroke)
-            cornerRadius = 22f
-        }
-    }
-
-    private fun lpWrap(): LinearLayout.LayoutParams {
-        return LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-    }
-
-    private fun Int.dp(): Int =
-        (this * resources.displayMetrics.density).toInt()
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
+
         super.onRequestPermissionsResult(
             requestCode,
             permissions,
             grantResults
         )
 
-        if (requestCode == REQUEST_PERMISSION) {
-            recreate()
+        if (
+            requestCode != REQUEST_PERMISSION
+        ) {
+            return
         }
+
+        recreate()
     }
 }

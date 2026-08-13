@@ -21,6 +21,8 @@
 
     <application
         android:label="Voice Jarvis"
+        android:icon="@drawable/ic_jarvis_logo"
+        android:roundIcon="@drawable/ic_jarvis_logo"
         android:theme="@style/Theme.VoiceJarvis"
         android:allowBackup="true">
 
