@@ -151,6 +151,11 @@ class ActionExecutor(
                     request
                 )
 
+            "media_control" ->
+                mediaControl(
+                    request
+                )
+
             else ->
                 ActionResult(
                     status =
@@ -313,6 +318,91 @@ class ActionExecutor(
                     request.action,
                 message =
                     "Unable to control flashlight: ${e.message}"
+            )
+        }
+    }
+
+    private fun mediaControl(
+        request: ActionRequest
+    ): ActionResult {
+
+        val mediaAction =
+            request.parameters["action"]
+                ?.trim()
+                ?.lowercase()
+                .orEmpty()
+
+        val keyCode =
+            when (mediaAction) {
+
+                "play_pause" ->
+                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+
+                "next" ->
+                    KeyEvent.KEYCODE_MEDIA_NEXT
+
+                "previous" ->
+                    KeyEvent.KEYCODE_MEDIA_PREVIOUS
+
+                "stop" ->
+                    KeyEvent.KEYCODE_MEDIA_STOP
+
+                else ->
+                    return ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            request.action,
+                        message =
+                            "Unknown media action '$mediaAction'."
+                    )
+            }
+
+        return try {
+
+            val audioManager =
+                context.getSystemService(
+                    Context.AUDIO_SERVICE
+                ) as AudioManager
+
+            audioManager.dispatchMediaKeyEvent(
+                KeyEvent(
+                    KeyEvent.ACTION_DOWN,
+                    keyCode
+                )
+            )
+
+            audioManager.dispatchMediaKeyEvent(
+                KeyEvent(
+                    KeyEvent.ACTION_UP,
+                    keyCode
+                )
+            )
+
+            ActionResult(
+                status =
+                    ActionStatus.EXECUTED,
+                action =
+                    request.action,
+                message =
+                    "Media control executed: $mediaAction.",
+                verified = false,
+                data =
+                    mapOf(
+                        "action" to
+                            mediaAction
+                    )
+            )
+
+        } catch (e: Exception) {
+
+            ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Unable to control media: ${e.message}"
             )
         }
     }

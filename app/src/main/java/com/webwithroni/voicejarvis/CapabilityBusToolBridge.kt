@@ -59,7 +59,8 @@ class CapabilityBusToolBridge(
             "toggle_flashlight",
             "set_volume",
             "set_alarm",
-            "set_timer" ->
+            "set_timer",
+            "media_control" ->
                 true
 
             else ->
@@ -389,6 +390,50 @@ class CapabilityBusToolBridge(
                                     seconds.toString(),
                                 "label" to
                                     label
+                            )
+                    )
+                }
+            }
+
+            "media_control" -> {
+
+                val mediaAction =
+                    args.optString(
+                        "action"
+                    )
+                        .trim()
+                        .lowercase()
+
+                val allowedActions =
+                    setOf(
+                        "play_pause",
+                        "next",
+                        "previous",
+                        "stop"
+                    )
+
+                if (
+                    mediaAction !in allowedActions
+                ) {
+
+                    ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            "media_control",
+                        message =
+                            "Unknown media action '$mediaAction'."
+                    )
+
+                } else {
+
+                    bus.executeSafe(
+                        action =
+                            "media_control",
+                        parameters =
+                            mapOf(
+                                "action" to
+                                    mediaAction
                             )
                     )
                 }
