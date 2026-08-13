@@ -120,6 +120,8 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
             )
         }
 
+        FirebaseCrashlyticsManager.initialize()
+
         FirebaseManager.initialize(this) { success ->
             if (success) {
                 android.util.Log.d(
@@ -429,6 +431,11 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
     private fun setJarvisState(state: JarvisState, label: String, sub: String) {
         orb.setJarvisState(state)
+
+        FirebaseCrashlyticsManager.setJarvisState(
+            state.name
+        )
+
         orb.contentDescription = when (state) {
             JarvisState.LISTENING -> "Jarvis is listening"
             JarvisState.HEARING -> "Jarvis is hearing your speech"
