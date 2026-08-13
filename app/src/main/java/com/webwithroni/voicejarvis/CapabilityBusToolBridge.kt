@@ -60,7 +60,9 @@ class CapabilityBusToolBridge(
             "set_volume",
             "set_alarm",
             "set_timer",
-            "media_control" ->
+            "media_control",
+            "call_contact",
+            "send_sms" ->
                 true
 
             else ->
@@ -395,6 +397,135 @@ class CapabilityBusToolBridge(
                 }
             }
 
+            "call_contact" -> {
+
+                val nameOrNumber =
+                    args.optString(
+                        "name_or_number"
+                    )
+                        .trim()
+
+                if (
+                    nameOrNumber.isBlank()
+                ) {
+
+                    ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            "call",
+                        message =
+                            "Contact name or phone number is required."
+                    )
+
+                } else {
+
+                    val number =
+                        resolveContactNumber(
+                            nameOrNumber
+                        )
+
+                    if (
+                        number == null
+                    ) {
+
+                        ActionResult(
+                            status =
+                                ActionStatus.FAILED,
+                            action =
+                                "call",
+                            message =
+                                "Could not find a contact matching '$nameOrNumber'."
+                        )
+
+                    } else {
+
+                        bus.executeSafe(
+                            action =
+                                "call",
+                            parameters =
+                                mapOf(
+                                    "number" to number
+                                )
+                        )
+                    }
+                }
+            }
+
+            "send_sms" -> {
+
+                val nameOrNumber =
+                    args.optString(
+                        "name_or_number"
+                    )
+                        .trim()
+
+                val message =
+                    args.optString(
+                        "message"
+                    )
+
+                if (
+                    nameOrNumber.isBlank()
+                ) {
+
+                    ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            "send_sms",
+                        message =
+                            "Contact name or phone number is required."
+                    )
+
+                } else if (
+                    message.isBlank()
+                ) {
+
+                    ActionResult(
+                        status =
+                            ActionStatus.FAILED,
+                        action =
+                            "send_sms",
+                        message =
+                            "SMS message is required."
+                    )
+
+                } else {
+
+                    val number =
+                        resolveContactNumber(
+                            nameOrNumber
+                        )
+
+                    if (
+                        number == null
+                    ) {
+
+                        ActionResult(
+                            status =
+                                ActionStatus.FAILED,
+                            action =
+                                "send_sms",
+                            message =
+                                "Could not find a contact matching '$nameOrNumber'."
+                        )
+
+                    } else {
+
+                        bus.executeSafe(
+                            action =
+                                "send_sms",
+                            parameters =
+                                mapOf(
+                                    "number" to number,
+                                    "message" to message
+                                )
+                        )
+                    }
+                }
+            }
+
             "media_control" -> {
 
                 val mediaAction =
@@ -451,6 +582,76 @@ class CapabilityBusToolBridge(
                 )
             }
         }
+    }
+
+    /**
+     * Resolve a contact name or raw phone number.
+     *
+     * Raw numbers are accepted without requiring contacts access.
+     * Named contacts require READ_CONTACTS.
+     */
+    private fun resolveContactNumber(
+        nameOrNumber: String
+    ): String? {
+
+        if (
+            nameOrNumber.any { it.isDigit() } &&
+            nameOrNumber.count { it.isDigit() } >= 6
+        ) {
+            return nameOrNumber
+        }
+
+        if (
+            androidx.core.content.ContextCompat
+                .checkSelfPermission(
+                    context,
+                    android.Manifest.permission.READ_CONTACTS
+                ) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            return null
+        }
+
+        val cursor =
+            context.contentResolver.query(
+                android.provider.ContactsContract
+                    .CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(
+                    android.provider.ContactsContract
+                        .CommonDataKinds.Phone.NUMBER,
+                    android.provider.ContactsContract
+                        .CommonDataKinds.Phone.DISPLAY_NAME
+                ),
+                "${android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?",
+                arrayOf(
+                    "%$nameOrNumber%"
+                ),
+                null
+            )
+
+        cursor?.use {
+
+            if (
+                it.moveToFirst()
+            ) {
+
+                val index =
+                    it.getColumnIndex(
+                        android.provider.ContactsContract
+                            .CommonDataKinds.Phone.NUMBER
+                    )
+
+                if (
+                    index >= 0
+                ) {
+                    return it.getString(
+                        index
+                    )
+                }
+            }
+        }
+
+        return null
     }
 
     /**

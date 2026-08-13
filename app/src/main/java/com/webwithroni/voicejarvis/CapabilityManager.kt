@@ -146,14 +146,15 @@ class CapabilityManager(
                 )
 
             SMS ->
-                permissionCapability(
+                CapabilityState(
                     id = SMS,
-                    name = "SMS",
-                    permission =
-                        android.Manifest.permission.SEND_SMS,
-                    risk =
-                        ActionRisk.MEDIUM,
-                    levelWhenAvailable = 3
+                    name = "SMS Composer",
+                    available = true,
+                    level = 3,
+                    risk = ActionRisk.MEDIUM,
+                    description =
+                        "Open the SMS composer with a prepared message. The user sends it manually.",
+                    setupRequired = false
                 )
 
             LOCATION ->

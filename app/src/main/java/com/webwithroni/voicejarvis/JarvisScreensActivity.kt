@@ -131,18 +131,6 @@ class JarvisScreensActivity : AppCompatActivity() {
                         Manifest.permission.CALL_PHONE
                 )
 
-            SMS ->
-                showPermission(
-                    title = "MESSAGE ACCESS",
-                    subtitle = "Let Jarvis help you communicate.",
-                    description =
-                        "SMS permission allows Jarvis to send messages only when the action is explicitly requested and permitted.",
-                    icon = R.drawable.ic_message,
-                    color = blue,
-                    permission =
-                        Manifest.permission.SEND_SMS
-                )
-
             NOTIFICATION ->
                 showNotificationPermission()
 

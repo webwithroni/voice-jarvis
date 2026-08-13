@@ -27,9 +27,7 @@ class ToolExecutor(private val context: Context) {
     fun execute(name: String, args: JSONObject): JSONObject {
         return try {
             when (name) {
-                "call_contact" -> callContact(args.optString("name_or_number"))
                 "send_whatsapp" -> sendWhatsapp(args.optString("name_or_number"), args.optString("message"))
-                "send_sms" -> sendSms(args.optString("name_or_number"), args.optString("message"))
                 "open_app" -> openApp(args.optString("app_name"))
                 "toggle_flashlight" -> toggleFlashlight(args.optBoolean("on", true))
                 "set_alarm" -> setAlarm(args.optInt("hour"), args.optInt("minute"), args.optString("label"))
@@ -96,15 +94,6 @@ class ToolExecutor(private val context: Context) {
         return null
     }
 
-    private fun callContact(nameOrNumber: String): JSONObject {
-        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.CALL_PHONE)
-            != PackageManager.PERMISSION_GRANTED) return result(false, "Call permission not granted")
-        val number = resolveNumber(nameOrNumber) ?: return result(false, "Could not find a contact matching '$nameOrNumber'")
-        val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number")).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
-        context.startActivity(intent)
-        return result(true, "Calling $nameOrNumber")
-    }
-
     private fun sendWhatsapp(nameOrNumber: String, message: String): JSONObject {
         val number = resolveNumber(nameOrNumber) ?: return result(false, "Could not find a contact matching '$nameOrNumber'")
         val cleanNumber = number.filter { it.isDigit() }
@@ -116,16 +105,6 @@ class ToolExecutor(private val context: Context) {
         } catch (e: Exception) {
             result(false, "WhatsApp is not installed")
         }
-    }
-
-    private fun sendSms(nameOrNumber: String, message: String): JSONObject {
-        val number = resolveNumber(nameOrNumber) ?: return result(false, "Could not find a contact matching '$nameOrNumber'")
-        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number")).apply {
-            putExtra("sms_body", message)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        context.startActivity(intent)
-        return result(true, "SMS drafted for $nameOrNumber. Ask the user to confirm before sending.")
     }
 
     private fun openApp(appName: String): JSONObject {

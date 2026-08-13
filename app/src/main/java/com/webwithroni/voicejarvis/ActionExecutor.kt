@@ -156,6 +156,16 @@ class ActionExecutor(
                     request
                 )
 
+            "call" ->
+                call(
+                    request
+                )
+
+            "send_sms" ->
+                sendSms(
+                    request
+                )
+
             else ->
                 ActionResult(
                     status =
@@ -318,6 +328,235 @@ class ActionExecutor(
                     request.action,
                 message =
                     "Unable to control flashlight: ${e.message}"
+            )
+        }
+    }
+
+    private fun call(
+        request: ActionRequest
+    ): ActionResult {
+
+        val number =
+            request.parameters["number"]
+                ?.trim()
+
+        if (
+            number.isNullOrBlank()
+        ) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Phone number is required."
+            )
+        }
+
+        if (
+            androidx.core.content.ContextCompat
+                .checkSelfPermission(
+                    context,
+                    android.Manifest.permission.CALL_PHONE
+                ) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.UNAVAILABLE,
+                action =
+                    request.action,
+                message =
+                    "Call permission is not granted."
+            )
+        }
+
+        return try {
+
+            val intent =
+                Intent(
+                    Intent.ACTION_CALL,
+                    Uri.parse(
+                        "tel:${Uri.encode(number)}"
+                    )
+                ).apply {
+
+                    flags =
+                        Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+
+            if (
+                intent.resolveActivity(
+                    context.packageManager
+                ) == null
+            ) {
+
+                return ActionResult(
+                    status =
+                        ActionStatus.UNAVAILABLE,
+                    action =
+                        request.action,
+                    message =
+                        "No phone application is available."
+                )
+            }
+
+            context.startActivity(
+                intent
+            )
+
+            ActionResult(
+                status =
+                    ActionStatus.EXECUTED,
+                action =
+                    request.action,
+                message =
+                    "Calling $number.",
+                verified = false,
+                data =
+                    mapOf(
+                        "number" to number
+                    )
+            )
+
+        } catch (e: SecurityException) {
+
+            ActionResult(
+                status =
+                    ActionStatus.UNAVAILABLE,
+                action =
+                    request.action,
+                message =
+                    "Call permission was rejected."
+            )
+
+        } catch (e: Exception) {
+
+            ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Unable to start call: ${e.message}"
+            )
+        }
+    }
+
+    private fun sendSms(
+        request: ActionRequest
+    ): ActionResult {
+
+        val number =
+            request.parameters["number"]
+                ?.trim()
+
+        val message =
+            request.parameters["message"]
+                .orEmpty()
+
+        if (
+            number.isNullOrBlank()
+        ) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Phone number is required."
+            )
+        }
+
+        if (
+            message.isBlank()
+        ) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "SMS message is required."
+            )
+        }
+
+        return try {
+
+            /*
+             * Deliberately use ACTION_SENDTO.
+             *
+             * This opens the user's SMS composer instead of
+             * silently transmitting an SMS in the background.
+             *
+             * The user remains responsible for pressing Send.
+             */
+            val intent =
+                Intent(
+                    Intent.ACTION_SENDTO,
+                    Uri.parse(
+                        "smsto:${Uri.encode(number)}"
+                    )
+                ).apply {
+
+                    putExtra(
+                        "sms_body",
+                        message
+                    )
+
+                    flags =
+                        Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+
+            if (
+                intent.resolveActivity(
+                    context.packageManager
+                ) == null
+            ) {
+
+                return ActionResult(
+                    status =
+                        ActionStatus.UNAVAILABLE,
+                    action =
+                        request.action,
+                    message =
+                        "No SMS application is available."
+                )
+            }
+
+            context.startActivity(
+                intent
+            )
+
+            ActionResult(
+                status =
+                    ActionStatus.EXECUTED,
+                action =
+                    request.action,
+                message =
+                    "SMS draft opened for $number.",
+                verified = false,
+                data =
+                    mapOf(
+                        "number" to number,
+                        "messageLength" to
+                            message.length.toString()
+                    )
+            )
+
+        } catch (e: Exception) {
+
+            ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Unable to open SMS composer: ${e.message}"
             )
         }
     }

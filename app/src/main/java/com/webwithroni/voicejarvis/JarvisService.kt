@@ -211,6 +211,38 @@ class JarvisService : Service() {
     private var lastJarvisText:
         String? = null
 
+    /**
+     * Durable confirmation state.
+     *
+     * A medium/high/critical action is first rejected by the
+     * deterministic RiskEngine. The complete normalized action
+     * is retained here until the user explicitly confirms or
+     * rejects it.
+     *
+     * This state belongs to JarvisService because the service
+     * owns the realtime conversation lifecycle.
+     */
+    private data class PendingConfirmation(
+        val action: String,
+        val target: String?,
+        val parameters: Map<String, String>,
+        val createdAt: Long
+    )
+
+    @Volatile
+    private var pendingConfirmation:
+        PendingConfirmation? = null
+
+    /*
+     * A confirmation request is intentionally short-lived.
+     *
+     * This prevents an old side-effecting action from being
+     * executed minutes later after the conversation context
+     * has changed.
+     */
+    private val confirmationTimeoutMs =
+        60_000L
+
     companion object {
 
         const val CHANNEL_ID =
@@ -820,6 +852,37 @@ class JarvisService : Service() {
 
                     if (cleaned.isNotBlank()) {
 
+                        /*
+                         * Confirmation is handled locally before
+                         * normal Gemini turn accumulation.
+                         *
+                         * This prevents "yes" from becoming an
+                         * ordinary conversational turn while a
+                         * side-effecting action is pending.
+                         */
+                        if (
+                            pendingConfirmation != null
+                        ) {
+
+                            /*
+                             * IMPORTANT:
+                             *
+                             * While a side-effecting action is
+                             * awaiting confirmation, ALL user input
+                             * stays local.
+                             *
+                             * Nothing ambiguous is allowed to fall
+                             * through into Gemini, because Gemini must
+                             * never be able to reinterpret an uncertain
+                             * confirmation as a fresh tool request.
+                             */
+                            resumePendingConfirmation(
+                                cleaned
+                            )
+
+                            return@onInputTranscript
+                        }
+
                         if (
                             !firebaseConversationStarted
                         ) {
@@ -1064,6 +1127,12 @@ class JarvisService : Service() {
                                 busHandles
                             ) {
 
+                                val plannedRequest =
+                                    planCapabilityToolCall(
+                                        name,
+                                        args
+                                    )
+
                                 val actionResult =
                                     capabilityBusToolBridge
                                         .execute(
@@ -1072,7 +1141,8 @@ class JarvisService : Service() {
                                         )
 
                                 actionResultToJson(
-                                    actionResult
+                                    actionResult,
+                                    plannedRequest
                                 )
 
                             } else {
@@ -1431,9 +1501,285 @@ class JarvisService : Service() {
         )
     }
 
+    /**
+     * Convert one migrated Gemini tool call into the exact
+     * ActionRequest used by the Capability Bus planner.
+     *
+     * This must mirror CapabilityBusToolBridge.execute()
+     * without executing the action.
+     */
+    private fun planCapabilityToolCall(
+        name: String,
+        args: org.json.JSONObject
+    ): ActionRequest {
+
+        return when (
+            name.trim()
+        ) {
+
+            "open_app" -> {
+
+                val appName =
+                    args.optString(
+                        "app_name"
+                    )
+                        .trim()
+
+                capabilityBus.plan(
+                    action = "open_app",
+                    target = appName
+                )
+            }
+
+            "read_screen" -> {
+
+                capabilityBus.plan(
+                    action = "read_screen"
+                )
+            }
+
+            "scroll_screen" -> {
+
+                val direction =
+                    args.optString(
+                        "direction",
+                        "down"
+                    )
+                        .trim()
+                        .lowercase()
+
+                capabilityBus.plan(
+                    action = "scroll",
+                    parameters =
+                        mapOf(
+                            "direction" to
+                                direction
+                        )
+                )
+            }
+
+            "tap_element" -> {
+
+                val id =
+                    args.optInt(
+                        "id",
+                        -1
+                    )
+
+                capabilityBus.plan(
+                    action = "tap_element",
+                    parameters =
+                        mapOf(
+                            "id" to
+                                id.toString()
+                        )
+                )
+            }
+
+            "go_back" -> {
+
+                capabilityBus.plan(
+                    action = "back"
+                )
+            }
+
+            "go_home" -> {
+
+                capabilityBus.plan(
+                    action = "home"
+                )
+            }
+
+            "get_battery" -> {
+
+                capabilityBus.plan(
+                    action = "get_battery"
+                )
+            }
+
+            "toggle_flashlight" -> {
+
+                val enabled =
+                    args.optBoolean(
+                        "on",
+                        false
+                    )
+
+                capabilityBus.plan(
+                    action = "toggle_flashlight",
+                    parameters =
+                        mapOf(
+                            "on" to
+                                enabled.toString()
+                        )
+                )
+            }
+
+            "set_volume" -> {
+
+                val percent =
+                    args.optInt(
+                        "percent",
+                        -1
+                    )
+
+                capabilityBus.plan(
+                    action = "set_volume",
+                    parameters =
+                        mapOf(
+                            "percent" to
+                                percent.toString()
+                        )
+                )
+            }
+
+            "set_alarm" -> {
+
+                val hour =
+                    args.optInt(
+                        "hour",
+                        -1
+                    )
+
+                val minute =
+                    args.optInt(
+                        "minute",
+                        -1
+                    )
+
+                val label =
+                    args.optString(
+                        "label",
+                        ""
+                    )
+
+                capabilityBus.plan(
+                    action = "set_alarm",
+                    parameters =
+                        mapOf(
+                            "hour" to
+                                hour.toString(),
+                            "minute" to
+                                minute.toString(),
+                            "label" to
+                                label
+                        )
+                )
+            }
+
+            "set_timer" -> {
+
+                val seconds =
+                    args.optInt(
+                        "seconds",
+                        -1
+                    )
+
+                val label =
+                    args.optString(
+                        "label",
+                        ""
+                    )
+
+                capabilityBus.plan(
+                    action = "set_timer",
+                    parameters =
+                        mapOf(
+                            "seconds" to
+                                seconds.toString(),
+                            "label" to
+                                label
+                        )
+                )
+            }
+
+            "media_control" -> {
+
+                val command =
+                    args.optString(
+                        "action",
+                        ""
+                    )
+                        .trim()
+
+                capabilityBus.plan(
+                    action = "media_control",
+                    parameters =
+                        mapOf(
+                            "action" to
+                                command
+                        )
+                )
+            }
+
+            "call_contact" -> {
+
+                val nameOrNumber =
+                    args.optString(
+                        "name_or_number",
+                        ""
+                    )
+                        .trim()
+
+                capabilityBus.plan(
+                    action = "call",
+                    target =
+                        nameOrNumber
+                )
+            }
+
+            "send_sms" -> {
+
+                val nameOrNumber =
+                    args.optString(
+                        "name_or_number",
+                        ""
+                    )
+                        .trim()
+
+                val message =
+                    args.optString(
+                        "message",
+                        ""
+                    )
+
+                capabilityBus.plan(
+                    action = "send_sms",
+                    target =
+                        nameOrNumber,
+                    parameters =
+                        mapOf(
+                            "message" to
+                                message
+                        )
+                )
+            }
+
+            else -> {
+
+                capabilityBus.plan(
+                    action =
+                        name.trim()
+                )
+            }
+        }
+    }
+
     private fun actionResultToJson(
-        result: ActionResult
+        result: ActionResult,
+        request: ActionRequest? = null
     ): org.json.JSONObject {
+
+        if (
+            result.status ==
+                ActionStatus.REQUIRES_USER &&
+            result.requiresConfirmation &&
+            request != null
+        ) {
+            setPendingConfirmation(
+                request
+            )
+        }
 
         val json =
             org.json.JSONObject()
@@ -1491,6 +1837,247 @@ class JarvisService : Service() {
         }
 
         return json
+    }
+
+    /**
+     * Store one action that is waiting for explicit user
+     * confirmation.
+     *
+     * Replaces any older pending action so stale side effects
+     * cannot be resumed accidentally.
+     */
+    private fun setPendingConfirmation(
+        request: ActionRequest
+    ) {
+
+        pendingConfirmation =
+            PendingConfirmation(
+                action =
+                    request.action,
+                target =
+                    request.target,
+                parameters =
+                    request.parameters.toMap(),
+                createdAt =
+                    SystemClockCompat.elapsedRealtime()
+            )
+
+        log(
+            "Confirmation required for: ${request.action}"
+        )
+
+        pushState(
+            JarvisState.THINKING,
+            "CONFIRMATION REQUIRED",
+            "Please confirm."
+        )
+    }
+
+    private fun clearPendingConfirmation() {
+
+        pendingConfirmation = null
+    }
+
+    private fun isAffirmativeConfirmation(
+        text: String
+    ): Boolean {
+
+        val normalized =
+            normalizeTranscript(
+                text
+            )
+                .lowercase(Locale.getDefault())
+
+        return normalized in setOf(
+            "yes",
+            "yeah",
+            "yep",
+            "yup",
+            "okay",
+            "ok",
+            "confirm",
+            "confirmed",
+            "do it",
+            "go ahead",
+            "send it",
+            "haan",
+            "hmm yes",
+            "thik ache",
+            "ঠিক আছে",
+            "হ্যাঁ"
+        )
+    }
+
+    private fun isNegativeConfirmation(
+        text: String
+    ): Boolean {
+
+        val normalized =
+            normalizeTranscript(
+                text
+            )
+                .lowercase(Locale.getDefault())
+
+        return normalized in setOf(
+            "no",
+            "nope",
+            "cancel",
+            "cancel it",
+            "don't",
+            "dont",
+            "stop",
+            "never mind",
+            "না",
+            "নাহ",
+            "বাদ দাও",
+            "cancel koro na"
+        )
+    }
+
+    /**
+     * Resume the exact action previously blocked by RiskEngine.
+     *
+     * The action is executed only after a positive confirmation
+     * from the user. Confirmation bypass is limited to this
+     * stored request; it is never model-controlled.
+     */
+    private fun resumePendingConfirmation(
+        confirmationText: String
+    ): Boolean {
+
+        val pending =
+            pendingConfirmation
+                ?: return true
+
+        /*
+         * Confirmation requests expire quickly.
+         *
+         * Never execute an action merely because an old
+         * PendingConfirmation object still exists.
+         */
+        val age =
+            (
+                SystemClockCompat.elapsedRealtime() -
+                    pending.createdAt
+            )
+
+        if (
+            age < 0L ||
+            age > confirmationTimeoutMs
+        ) {
+
+            clearPendingConfirmation()
+
+            pushState(
+                JarvisState.LISTENING,
+                "CONFIRMATION EXPIRED",
+                "The previous action expired. Please ask again."
+            )
+
+            log(
+                "Pending action expired before confirmation: ${pending.action}"
+            )
+
+            return true
+        }
+
+        if (
+            isNegativeConfirmation(
+                confirmationText
+            )
+        ) {
+
+            clearPendingConfirmation()
+
+            pushState(
+                JarvisState.LISTENING,
+                "CANCELLED",
+                ""
+            )
+
+            log(
+                "Pending action cancelled by user."
+            )
+
+            return true
+        }
+
+        if (
+            isAffirmativeConfirmation(
+                confirmationText
+            )
+        ) {
+
+            /*
+             * Consume the pending request BEFORE execution.
+             *
+             * This prevents duplicate execution if the audio
+             * pipeline delivers the same confirmation transcript
+             * more than once.
+             */
+            clearPendingConfirmation()
+
+            val result =
+                capabilityBus.execute(
+                    action =
+                        pending.action,
+                    target =
+                        pending.target,
+                    parameters =
+                        pending.parameters,
+                    skipConfirmation =
+                        true
+                )
+
+            log(
+                "Confirmed action ${pending.action}: ${result.status.name}"
+            )
+
+            handler.post {
+
+                when (result.status) {
+
+                    ActionStatus.EXECUTED,
+                    ActionStatus.VERIFIED -> {
+
+                        pushState(
+                            JarvisState.LISTENING,
+                            "DONE",
+                            result.message
+                        )
+                    }
+
+                    else -> {
+
+                        pushState(
+                            JarvisState.ERROR,
+                            "ACTION FAILED",
+                            result.message
+                        )
+                    }
+                }
+            }
+
+            return true
+        }
+
+        /*
+         * IMPORTANT:
+         *
+         * Ambiguous input is consumed locally.
+         * It MUST NOT reach Gemini.
+         */
+        pushState(
+            JarvisState.THINKING,
+            "CONFIRMATION REQUIRED",
+            "Please say yes to continue or no to cancel."
+        )
+
+        log(
+            "Ambiguous confirmation input rejected locally: $confirmationText"
+        )
+
+        return true
     }
 
     private fun normalizeTranscript(
@@ -2055,7 +2642,8 @@ class JarvisService : Service() {
     ) {
 
         logBuffer
-            .append("\n")
+            .append("
+")
             .append(message)
 
         listener?.onLog(
@@ -2225,6 +2813,8 @@ class JarvisService : Service() {
     }
 
     override fun onDestroy() {
+
+        clearPendingConfirmation()
 
         super.onDestroy()
 
