@@ -55,7 +55,14 @@ class AudioEngine(
          * A huge queue creates audible latency when the
          * user interrupts Jarvis.
          */
-        private const val MAX_PLAYBACK_QUEUE = 12
+        /*
+         * Keep enough buffered PCM to absorb normal network
+         * jitter without dropping any speech.
+         *
+         * We NEVER discard audio during normal playback.
+         * Interruption explicitly clears this queue.
+         */
+        private const val MAX_PLAYBACK_QUEUE = 48
     }
 
     private var audioRecord: AudioRecord? = null
@@ -407,7 +414,17 @@ class AudioEngine(
                             chunk == null
                         ) {
 
-                            if (playing) {
+                            /*
+                             * Only report idle when there is genuinely
+                             * no queued PCM left.
+                             *
+                             * JarvisService additionally checks whether
+                             * Gemini has completed the response turn.
+                             */
+                            if (
+                                playing &&
+                                playbackQueue.isEmpty()
+                            ) {
                                 onPlaybackIdle()
                             }
 
@@ -443,6 +460,12 @@ class AudioEngine(
                                     ) ?: -1
 
                                 if (written <= 0) {
+
+                                    Log.w(
+                                        TAG,
+                                        "AudioTrack wrote $written bytes; stopping current chunk."
+                                    )
+
                                     break
                                 }
 
@@ -470,28 +493,51 @@ class AudioEngine(
         pcm: ByteArray
     ) {
 
-        /*
-         * Never allow the playback queue to grow without
-         * bounds. Large queues make interruption feel slow.
-         */
         if (
-            playbackQueue.remainingCapacity() == 0
+            pcm.isEmpty() ||
+            !playing
         ) {
-
-            /*
-             * Drop the oldest chunk rather than allowing
-             * latency to accumulate.
-             */
-            playbackQueue.poll()
+            return
         }
 
-        playbackQueue.offer(
-            pcm.copyOf()
-        )
+        /*
+         * NEVER drop PCM during normal playback.
+         *
+         * Dropping even a single speech chunk causes:
+         *
+         * - missing syllables
+         * - robotic audio
+         * - accelerated sounding speech
+         * - incomplete words
+         *
+         * The queue is intentionally bounded, so if network
+         * delivery temporarily outruns playback, this producer
+         * waits instead of deleting audio.
+         *
+         * clearPlaybackQueue() remains the explicit interruption
+         * path.
+         */
+        try {
+
+            playbackQueue.put(
+                pcm.copyOf()
+            )
+
+        } catch (_: InterruptedException) {
+
+            Thread.currentThread().interrupt()
+        }
     }
 
     fun clearPlaybackQueue() {
 
+        /*
+         * Explicit barge-in / interruption path.
+         *
+         * Normal playback NEVER drops PCM.
+         * Interruption is the one place where all queued
+         * response audio must be discarded immediately.
+         */
         playbackQueue.clear()
 
         try {
@@ -500,7 +546,12 @@ class AudioEngine(
             audioTrack?.flush()
             audioTrack?.play()
 
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+
+            Log.w(
+                TAG,
+                "AudioTrack flush failed: ${e.message}"
+            )
         }
     }
 
