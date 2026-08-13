@@ -7,7 +7,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 /**
  * Canonical capability execution layer.
  *
- * Architecture:
+ * Pipeline:
  *
  * Raw action
  *     ↓
@@ -29,8 +29,7 @@ import android.view.accessibility.AccessibilityNodeInfo
  *
  * RecoveryEngine never calls CapabilityBus recursively.
  *
- * Recovery is deliberately conservative and currently only retries
- * the low-risk scroll action using a swipe fallback.
+ * Security validation happens before execution.
  */
 class CapabilityBus(
     context: Context
@@ -87,11 +86,7 @@ class CapabilityBus(
     }
 
     /**
-     * Execute through the complete capability pipeline.
-     *
-     * Security checks happen before recovery.
-     *
-     * Recovery handles execution and verification only.
+     * Execute through the full capability pipeline.
      */
     fun execute(
         action: String,
@@ -108,8 +103,7 @@ class CapabilityBus(
             )
 
         /*
-         * Security policy is evaluated before execution unless
-         * the caller has already explicitly authorized the action.
+         * Security policy is evaluated before recovery.
          */
         if (
             !skipConfirmation
@@ -128,15 +122,26 @@ class CapabilityBus(
             }
         }
 
+        /*
+         * Recovery owns:
+         *
+         * - execution
+         * - verification
+         * - bounded retry
+         * - recovery classification
+         */
         return recoveryEngine.execute(
-            request = request,
+
+            request =
+                request,
 
             verify = {
                 verificationRequest,
                 initialFingerprint ->
 
                 VerificationEngine(
-                    VoiceJarvisAccessibilityService.instance
+                    VoiceJarvisAccessibilityService
+                        .instance
                 ).verify(
                     request =
                         verificationRequest,
@@ -152,7 +157,7 @@ class CapabilityBus(
     }
 
     /**
-     * Convenience helper using the normal confirmation policy.
+     * Convenience helper using normal confirmation policy.
      */
     fun executeSafe(
         action: String,
@@ -169,7 +174,7 @@ class CapabilityBus(
     }
 
     /**
-     * Expose authoritative capability state.
+     * Expose the authoritative capability state.
      */
     fun capabilityFor(
         action: String
@@ -186,15 +191,15 @@ class CapabilityBus(
     }
 
     /**
-     * Capture the current visible screen.
+     * Capture immutable screen state for verification.
      *
-     * Only immutable string data leaves this method.
-     * No AccessibilityNodeInfo reference is retained.
+     * No AccessibilityNodeInfo reference escapes this method.
      */
     private fun captureFingerprint(): String? {
 
         val service =
-            VoiceJarvisAccessibilityService.instance
+            VoiceJarvisAccessibilityService
+                .instance
                 ?: return null
 
         return try {
@@ -230,11 +235,15 @@ class CapabilityBus(
                     elements
                         .take(80)
                         .forEach {
+
                             append(it)
+
                             append(';')
                         }
 
-                }.take(14_000)
+                }.take(
+                    14_000
+                )
 
             } finally {
 
@@ -249,6 +258,9 @@ class CapabilityBus(
         }
     }
 
+    /**
+     * Recursively collect immutable fingerprint data.
+     */
     private fun collectFingerprintNodes(
         node: AccessibilityNodeInfo,
         output: MutableList<String>,

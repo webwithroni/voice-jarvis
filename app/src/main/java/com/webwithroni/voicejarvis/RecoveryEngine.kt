@@ -3,57 +3,37 @@ package com.webwithroni.voicejarvis
 /**
  * Bounded and conservative action recovery engine.
  *
- * V1 recovery policy:
+ * Pipeline:
  *
- * Only low-risk, retry-safe actions receive automatic recovery.
+ * Action
+ *   ↓
+ * Execute
+ *   ↓
+ * Verify
+ *   ↓
+ * FailureClassifier
+ *   ↓
+ * RecoveryPolicy
+ *   ↓
+ * Retry / Stop
  *
- * Currently:
+ * Safety guarantees:
  *
- *     scroll
- *       ↓
- *     retry as swipe
- *
- * Important safety rule:
- *
- * Verification failure does NOT automatically mean that the action
- * should be repeated.
- *
- * For side-effecting actions such as:
- *
- * - tap
- * - tap_element
- * - type
- * - open_app
- * - back
- * - home
- * - recents
- *
- * we never blindly repeat the action.
- *
- * This prevents duplicate taps, duplicate text entry, repeated
- * navigation, or unintended repeated app launches.
- *
- * Recovery never calls CapabilityBus recursively.
+ * 1. No recursive CapabilityBus calls.
+ * 2. Maximum attempts are bounded.
+ * 3. Only explicitly allowed actions may retry.
+ * 4. Side-effect uncertainty never becomes automatic retry.
+ * 5. UNKNOWN remains UNKNOWN when proof is unavailable.
  */
 class RecoveryEngine(
     private val executor: ActionExecutor
 ) {
 
-    companion object {
-
-        private const val MAX_ATTEMPTS = 2
-    }
-
     /**
-     * Execute an action with conservative recovery.
+     * Execute an action with bounded recovery.
      *
-     * Security checks have already been performed by CapabilityBus.
-     *
-     * This layer is responsible only for:
-     *
-     * 1. execution
-     * 2. verification
-     * 3. safe recovery
+     * CapabilityBus performs security validation before this
+     * method is reached.
      */
     fun execute(
         request: ActionRequest,
@@ -64,22 +44,6 @@ class RecoveryEngine(
         captureFingerprint: () -> String?
     ): ActionResult {
 
-        /*
-         * Only actions explicitly listed here are allowed to retry.
-         */
-        if (
-            !isRecoverable(
-                request.action
-            )
-        ) {
-
-            return executeOnce(
-                request = request,
-                verify = verify,
-                captureFingerprint = captureFingerprint
-            )
-        }
-
         var currentRequest =
             request
 
@@ -89,24 +53,30 @@ class RecoveryEngine(
         var lastVerificationResult:
             ActionResult? = null
 
+        var lastFailure =
+            RecoveryFailure.NON_RECOVERABLE
+
         for (
-            attempt in 1..MAX_ATTEMPTS
+            attempt in 1..RecoveryPolicy.MAX_ATTEMPTS
         ) {
 
+            /*
+             * Capture pre-state only when verification is meaningful.
+             */
             val initialFingerprint =
                 if (
                     RiskEngine.requiresVerification(
                         currentRequest.action
                     )
                 ) {
-
                     captureFingerprint()
-
                 } else {
-
                     null
                 }
 
+            /*
+             * Execute exactly once for this attempt.
+             */
             val executionResult =
                 try {
 
@@ -143,54 +113,88 @@ class RecoveryEngine(
                 executionResult
 
             /*
-             * Permission failures and confirmation requirements
-             * are never fixed by retrying.
+             * Classify the execution outcome first.
+             */
+            var failure =
+                FailureClassifier.classify(
+                    currentRequest,
+                    executionResult
+                )
+
+            lastFailure =
+                failure
+
+            /*
+             * Terminal security/capability outcomes.
              */
             if (
-                executionResult.status ==
-                    ActionStatus.UNAVAILABLE ||
-                executionResult.status ==
-                    ActionStatus.REQUIRES_USER
+                failure ==
+                    RecoveryFailure.CAPABILITY_UNAVAILABLE ||
+                failure ==
+                    RecoveryFailure.USER_CONFIRMATION_REQUIRED
             ) {
 
-                return executionResult
+                return withRecoveryMetadata(
+                    executionResult,
+                    attempt,
+                    failure
+                )
             }
 
             /*
-             * Hard failure:
+             * Hard execution failure may be recoverable for scroll.
              *
-             * For the only V1 recoverable action (scroll), the
-             * alternate strategy can still be attempted.
+             * We only continue when RecoveryPolicy explicitly
+             * allows it.
              */
             if (
-                executionResult.status ==
-                    ActionStatus.FAILED
+                failure ==
+                    RecoveryFailure.EXECUTION_FAILED ||
+                failure ==
+                    RecoveryFailure.STALE_UI
             ) {
 
                 if (
-                    attempt >= MAX_ATTEMPTS
+                    RecoveryPolicy.canRecover(
+                        currentRequest,
+                        failure,
+                        attempt
+                    )
                 ) {
 
-                    return executionResult.copy(
-                        data =
-                            executionResult.data +
-                                mapOf(
-                                    "recoveryAttempts" to
-                                        attempt.toString()
-                                )
-                    )
+                    val recoveredRequest =
+                        RecoveryPolicy.recoverRequest(
+                            currentRequest
+                        )
+
+                    if (
+                        recoveredRequest != null
+                    ) {
+
+                        currentRequest =
+                            recoveredRequest
+
+                        continue
+                    }
                 }
 
-                currentRequest =
-                    recoverRequest(
-                        currentRequest
-                    )
-
-                continue
+                return finalFailure(
+                    request =
+                        currentRequest,
+                    executionResult =
+                        executionResult,
+                    verificationResult =
+                        null,
+                    failure =
+                        failure,
+                    attempts =
+                        attempt
+                )
             }
 
             /*
-             * If execution was already verified, we're done.
+             * If the executor itself already proved success,
+             * no second verification pass is required.
              */
             if (
                 executionResult.status ==
@@ -198,12 +202,16 @@ class RecoveryEngine(
                 executionResult.verified
             ) {
 
-                return executionResult
+                return withRecoveryMetadata(
+                    executionResult,
+                    attempt,
+                    RecoveryFailure.NONE
+                )
             }
 
             /*
-             * Actions without verification requirements use
-             * the execution result directly.
+             * No verification policy means execution result is the
+             * highest level of evidence currently available.
              */
             if (
                 !RiskEngine.requiresVerification(
@@ -211,342 +219,267 @@ class RecoveryEngine(
                 )
             ) {
 
-                return executionResult
+                return withRecoveryMetadata(
+                    executionResult,
+                    attempt,
+                    failure
+                )
             }
 
             /*
-             * Observe the actual post-action state.
+             * Perform post-action verification.
              */
             val verificationResult =
-                verify(
-                    currentRequest,
-                    initialFingerprint
-                )
+                try {
+
+                    verify(
+                        currentRequest,
+                        initialFingerprint
+                    )
+
+                } catch (
+                    e: Exception
+                ) {
+
+                    ActionResult(
+                        status =
+                            ActionStatus.UNKNOWN,
+                        action =
+                            currentRequest.action,
+                        message =
+                            "Verification failed unexpectedly: " +
+                                (
+                                    e.message
+                                        ?: e.javaClass.simpleName
+                                ),
+                        verified = false
+                    )
+                }
 
             lastVerificationResult =
                 verificationResult
 
-            when (
-                verificationResult.status
+            /*
+             * Verification success is authoritative.
+             */
+            if (
+                verificationResult.status ==
+                    ActionStatus.VERIFIED &&
+                verificationResult.verified
             ) {
 
-                ActionStatus.VERIFIED -> {
+                return ActionResult(
+                    status =
+                        ActionStatus.VERIFIED,
+                    action =
+                        currentRequest.action,
+                    message =
+                        verificationResult.message,
+                    verified = true,
+                    requiresConfirmation =
+                        verificationResult
+                            .requiresConfirmation,
+                    data =
+                        executionResult.data +
+                            verificationResult.data +
+                            mapOf(
+                                "recoveryAttempts" to
+                                    attempt.toString(),
+                                "recoveryFailure" to
+                                    RecoveryFailure.NONE.name,
+                                "automaticRetry" to
+                                    (
+                                        if (
+                                            attempt > 1
+                                        ) {
+                                            "true"
+                                        } else {
+                                            "false"
+                                        }
+                                    )
+                            )
+                )
+            }
 
-                    return verificationResult.copy(
-                        data =
-                            executionResult.data +
-                                verificationResult.data +
-                                mapOf(
-                                    "recoveryAttempts" to
-                                        attempt.toString()
-                                )
+            /*
+             * Reclassify based on the verification result.
+             */
+            failure =
+                FailureClassifier.classify(
+                    currentRequest,
+                    verificationResult
+                )
+
+            lastFailure =
+                failure
+
+            /*
+             * Permission/confirmation during verification is terminal.
+             */
+            if (
+                failure ==
+                    RecoveryFailure.CAPABILITY_UNAVAILABLE ||
+                failure ==
+                    RecoveryFailure.USER_CONFIRMATION_REQUIRED
+            ) {
+
+                return withMergedMetadata(
+                    executionResult,
+                    verificationResult,
+                    attempt,
+                    failure
+                )
+            }
+
+            /*
+             * Side-effect uncertainty is NEVER retried.
+             */
+            if (
+                failure ==
+                    RecoveryFailure.SIDE_EFFECT_UNCERTAIN
+            ) {
+
+                return withMergedMetadata(
+                    executionResult,
+                    verificationResult,
+                    attempt,
+                    failure
+                )
+            }
+
+            /*
+             * Only explicitly recoverable failures may continue.
+             */
+            if (
+                RecoveryPolicy.canRecover(
+                    currentRequest,
+                    failure,
+                    attempt
+                )
+            ) {
+
+                val recoveredRequest =
+                    RecoveryPolicy.recoverRequest(
+                        currentRequest
                     )
-                }
 
-                ActionStatus.UNAVAILABLE,
-                ActionStatus.REQUIRES_USER -> {
+                if (
+                    recoveredRequest != null
+                ) {
 
-                    return verificationResult.copy(
-                        data =
-                            executionResult.data +
-                                verificationResult.data +
-                                mapOf(
-                                    "recoveryAttempts" to
-                                        attempt.toString()
-                                )
-                    )
-                }
-
-                ActionStatus.UNKNOWN,
-                ActionStatus.FAILED -> {
-
-                    /*
-                     * IMPORTANT:
-                     *
-                     * We do not retry the action unless the action
-                     * is explicitly considered retry-safe.
-                     */
-                    if (
-                        attempt >= MAX_ATTEMPTS
-                    ) {
-
-                        return finalUnknown(
-                            request =
-                                currentRequest,
-                            executionResult =
-                                executionResult,
-                            verificationResult =
-                                verificationResult,
-                            attempts =
-                                attempt
-                        )
-                    }
-
-                    /*
-                     * For scroll, change the implementation strategy:
-                     *
-                     * accessibility scroll
-                     *        ↓
-                     * real swipe
-                     */
                     currentRequest =
-                        recoverRequest(
-                            currentRequest
-                        )
-                }
+                        recoveredRequest
 
-                else -> {
-
-                    return finalUnknown(
-                        request =
-                            currentRequest,
-                        executionResult =
-                            executionResult,
-                        verificationResult =
-                            verificationResult,
-                        attempts =
-                            attempt
-                    )
+                    continue
                 }
             }
+
+            /*
+             * No safe recovery path remains.
+             */
+            return finalFailure(
+                request =
+                    currentRequest,
+                executionResult =
+                    executionResult,
+                verificationResult =
+                    verificationResult,
+                failure =
+                    failure,
+                attempts =
+                    attempt
+            )
         }
 
-        return finalUnknown(
+        return finalFailure(
             request =
                 currentRequest,
             executionResult =
                 lastExecutionResult,
             verificationResult =
                 lastVerificationResult,
+            failure =
+                lastFailure,
             attempts =
-                MAX_ATTEMPTS
+                RecoveryPolicy.MAX_ATTEMPTS
         )
     }
 
     /**
-     * Execute one non-recoverable action exactly once.
-     *
-     * This is critical for preventing duplicate side effects.
+     * Add deterministic recovery metadata to a result.
      */
-    private fun executeOnce(
-        request: ActionRequest,
-        verify: (
-            request: ActionRequest,
-            initialFingerprint: String?
-        ) -> ActionResult,
-        captureFingerprint: () -> String?
+    private fun withRecoveryMetadata(
+        result: ActionResult,
+        attempts: Int,
+        failure: RecoveryFailure
     ): ActionResult {
 
-        val initialFingerprint =
-            if (
-                RiskEngine.requiresVerification(
-                    request.action
-                )
-            ) {
-
-                captureFingerprint()
-
-            } else {
-
-                null
-            }
-
-        val executionResult =
-            try {
-
-                executor.execute(
-                    action =
-                        request.action,
-                    target =
-                        request.target,
-                    parameters =
-                        request.parameters,
-                    skipConfirmation = true
-                )
-
-            } catch (
-                e: Exception
-            ) {
-
-                return ActionResult(
-                    status =
-                        ActionStatus.FAILED,
-                    action =
-                        request.action,
-                    message =
-                        "Action execution failed: " +
+        return result.copy(
+            data =
+                result.data +
+                    mapOf(
+                        "recoveryAttempts" to
+                            attempts.toString(),
+                        "recoveryFailure" to
+                            failure.name,
+                        "automaticRetry" to
                             (
-                                e.message
-                                    ?: e.javaClass.simpleName
-                            ),
-                    verified = false
-                )
-            }
-
-        /*
-         * Do not verify after a hard execution failure.
-         */
-        if (
-            executionResult.status ==
-                ActionStatus.FAILED ||
-            executionResult.status ==
-                ActionStatus.UNAVAILABLE ||
-            executionResult.status ==
-                ActionStatus.REQUIRES_USER
-        ) {
-
-            return executionResult
-        }
-
-        /*
-         * Executor already verified it.
-         */
-        if (
-            executionResult.status ==
-                ActionStatus.VERIFIED &&
-            executionResult.verified
-        ) {
-
-            return executionResult
-        }
-
-        /*
-         * No verification policy.
-         */
-        if (
-            !RiskEngine.requiresVerification(
-                request.action
-            )
-        ) {
-
-            return executionResult
-        }
-
-        val verificationResult =
-            verify(
-                request,
-                initialFingerprint
-            )
-
-        return when (
-            verificationResult.status
-        ) {
-
-            ActionStatus.VERIFIED -> {
-
-                verificationResult.copy(
-                    data =
-                        executionResult.data +
-                            verificationResult.data +
-                            mapOf(
-                                "recoveryAttempts" to
-                                    "1"
-                            )
-                )
-            }
-
-            ActionStatus.UNAVAILABLE,
-            ActionStatus.REQUIRES_USER -> {
-
-                verificationResult.copy(
-                    data =
-                        executionResult.data +
-                            verificationResult.data +
-                            mapOf(
-                                "recoveryAttempts" to
-                                    "1"
-                            )
-                )
-            }
-
-            ActionStatus.UNKNOWN,
-            ActionStatus.FAILED -> {
-
-                /*
-                 * The action may have happened.
-                 *
-                 * We refuse to repeat a potentially side-effecting
-                 * action merely because verification was inconclusive.
-                 */
-                ActionResult(
-                    status =
-                        ActionStatus.UNKNOWN,
-                    action =
-                        request.action,
-                    message =
-                        "Action was executed, but its result could not be verified safely. " +
-                            "No automatic retry was performed.",
-                    verified = false,
-                    data =
-                        executionResult.data +
-                            verificationResult.data +
-                            mapOf(
-                                "recoveryAttempts" to
-                                    "1",
-                                "automaticRetry" to
+                                if (
+                                    attempts > 1
+                                ) {
+                                    "true"
+                                } else {
                                     "false"
+                                }
                             )
-                )
-            }
-
-            else -> {
-
-                executionResult
-            }
-        }
+                    )
+        )
     }
 
     /**
-     * Explicit V1 allow-list.
-     *
-     * Only scroll is currently safe to recover automatically.
+     * Merge execution + verification evidence.
      */
-    private fun isRecoverable(
-        action: String
-    ): Boolean {
+    private fun withMergedMetadata(
+        executionResult: ActionResult,
+        verificationResult: ActionResult,
+        attempts: Int,
+        failure: RecoveryFailure
+    ): ActionResult {
 
-        return action
-            .trim()
-            .lowercase()
-            .let {
-                it == "scroll"
-            }
+        return ActionResult(
+            status =
+                verificationResult.status,
+            action =
+                verificationResult.action,
+            message =
+                verificationResult.message,
+            verified =
+                verificationResult.verified,
+            requiresConfirmation =
+                verificationResult
+                    .requiresConfirmation,
+            data =
+                executionResult.data +
+                    verificationResult.data +
+                    mapOf(
+                        "recoveryAttempts" to
+                            attempts.toString(),
+                        "recoveryFailure" to
+                            failure.name,
+                        "automaticRetry" to
+                            "false"
+                    )
+        )
     }
 
     /**
-     * Convert the scroll strategy into a gesture strategy.
+     * Produce an honest final failure.
      */
-    private fun recoverRequest(
-        request: ActionRequest
-    ): ActionRequest {
-
-        return when (
-            request.action
-        ) {
-
-            "scroll" -> {
-
-                request.copy(
-                    action = "swipe"
-                )
-            }
-
-            else -> {
-
-                request
-            }
-        }
-    }
-
-    /**
-     * Honest final result after recovery is exhausted.
-     *
-     * UNKNOWN remains UNKNOWN.
-     */
-    private fun finalUnknown(
+    private fun finalFailure(
         request: ActionRequest,
         executionResult: ActionResult?,
         verificationResult: ActionResult?,
+        failure: RecoveryFailure,
         attempts: Int
     ): ActionResult {
 
@@ -568,28 +501,41 @@ class RecoveryEngine(
 
         return ActionResult(
             status =
-                ActionStatus.UNKNOWN,
+                if (
+                    verificationResult != null
+                ) {
+                    ActionStatus.UNKNOWN
+                } else {
+                    executionResult
+                        ?.status
+                        ?: ActionStatus.UNKNOWN
+                },
             action =
                 request.action,
             message =
-                "Recovery completed after $attempts attempt(s). " +
+                "Recovery stopped after $attempts attempt(s). " +
                     "$executionMessage " +
                     "$verificationMessage",
             verified = false,
+            requiresConfirmation = false,
             data =
                 (executionResult?.data ?: emptyMap()) +
                     (verificationResult?.data ?: emptyMap()) +
                     mapOf(
                         "recoveryAttempts" to
                             attempts.toString(),
+                        "recoveryFailure" to
+                            failure.name,
                         "automaticRetry" to
-                            if (
-                                attempts > 1
-                            ) {
-                                "true"
-                            } else {
-                                "false"
-                            }
+                            (
+                                if (
+                                    attempts > 1
+                                ) {
+                                    "true"
+                                } else {
+                                    "false"
+                                }
+                            )
                     )
         )
     }
