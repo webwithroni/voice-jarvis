@@ -248,8 +248,62 @@ class GeminiLiveClient(
                         )
 
                         /*
-                         * Keep transcription enabled.
+                         * Keep transcription enabled and use
+                         * server-side VAD tuned for natural Hindi,
+                         * Hinglish and English speech.
+                         *
+                         * 700ms is a deliberate latency/continuity
+                         * compromise: long enough for natural pauses,
+                         * much safer than the previous aggressive
+                         * local 450ms boundary.
                          */
+                        put(
+                            "realtimeInputConfig",
+                            JSONObject().apply {
+
+                                put(
+                                    "automaticActivityDetection",
+                                    JSONObject().apply {
+
+                                        put(
+                                            "disabled",
+                                            false
+                                        )
+
+                                        put(
+                                            "startOfSpeechSensitivity",
+                                            "START_SENSITIVITY_LOW"
+                                        )
+
+                                        put(
+                                            "endOfSpeechSensitivity",
+                                            "END_SENSITIVITY_LOW"
+                                        )
+
+                                        put(
+                                            "prefixPaddingMs",
+                                            120
+                                        )
+
+                                        put(
+                                            "silenceDurationMs",
+                                            700
+                                        )
+                                    }
+                                )
+
+                                put(
+                                    "activityHandling",
+                                    "START_OF_ACTIVITY_INTERRUPTS"
+                                )
+
+                                put(
+                                    "turnCoverage",
+                                    "TURN_INCLUDES_ALL_INPUT"
+                                )
+                            }
+                        )
+
                         put(
                             "outputAudioTranscription",
                             JSONObject()

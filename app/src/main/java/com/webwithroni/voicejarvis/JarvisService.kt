@@ -97,7 +97,13 @@ class JarvisService : Service() {
     /*
      * Faster conversational turn detection.
      */
-    private val silenceTimeoutMs = 450L
+    /*
+     * Local UI debounce only.
+     *
+     * Gemini Live owns the actual turn boundary through
+     * server-side automatic activity detection.
+     */
+    private val silenceTimeoutMs = 700L
 
     var currentState = JarvisState.THINKING
         private set
@@ -428,7 +434,10 @@ class JarvisService : Service() {
                     }
 
                     latestUserTranscript =
-                        cleaned
+                        mergeTranscript(
+                            latestUserTranscript,
+                            cleaned
+                        )
 
                     lastUserText =
                         cleaned
@@ -481,7 +490,10 @@ class JarvisService : Service() {
                     }
 
                     latestJarvisTranscript =
-                        cleaned
+                        mergeTranscript(
+                            latestJarvisTranscript,
+                            cleaned
+                        )
 
                     lastJarvisText =
                         cleaned
@@ -709,6 +721,94 @@ class JarvisService : Service() {
                 " "
             )
             .trim()
+    }
+
+    /*
+     * Gemini Live transcription is streamed.
+     *
+     * An incoming callback may be:
+     *
+     * - a cumulative transcript
+     * - a revised partial transcript
+     * - a new fragment
+     *
+     * Never blindly overwrite the previous transcript.
+     */
+    private fun mergeTranscript(
+        previous: String,
+        incoming: String
+    ): String {
+
+        val next = normalizeTranscript(incoming)
+
+        if (next.isBlank()) {
+            return previous
+        }
+
+        if (previous.isBlank()) {
+            return next
+        }
+
+        if (previous == next) {
+            return previous
+        }
+
+        /*
+         * Cumulative update:
+         *
+         * hello
+         * hello jarvis
+         */
+        if (next.startsWith(previous)) {
+            return next
+        }
+
+        /*
+         * Revised shorter interim result.
+         *
+         * Keep the more complete existing text until a new
+         * stable turn arrives.
+         */
+        if (previous.startsWith(next)) {
+            return previous
+        }
+
+        val previousWords = previous.split(" ")
+        val nextWords = next.split(" ")
+
+        /*
+         * Detect suffix/prefix overlap to avoid duplicates.
+         */
+        val maxOverlap = minOf(
+            8,
+            previousWords.size,
+            nextWords.size
+        )
+
+        for (size in maxOverlap downTo 1) {
+
+            val previousSuffix =
+                previousWords.takeLast(size)
+
+            val nextPrefix =
+                nextWords.take(size)
+
+            if (previousSuffix == nextPrefix) {
+
+                val remainder =
+                    nextWords
+                        .drop(size)
+                        .joinToString(" ")
+
+                return if (remainder.isBlank()) {
+                    previous
+                } else {
+                    "$previous $remainder"
+                }
+            }
+        }
+
+        return "$previous $next"
     }
 
     private fun enterFallbackMode() {
