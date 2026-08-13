@@ -451,6 +451,7 @@ class ActionExecutor(
                     if (
                         label.isNotBlank()
                     ) {
+
                         putExtra(
                             AlarmClock.EXTRA_MESSAGE,
                             label
@@ -460,6 +461,22 @@ class ActionExecutor(
                     flags =
                         Intent.FLAG_ACTIVITY_NEW_TASK
                 }
+
+            if (
+                intent.resolveActivity(
+                    context.packageManager
+                ) == null
+            ) {
+
+                return ActionResult(
+                    status =
+                        ActionStatus.UNAVAILABLE,
+                    action =
+                        request.action,
+                    message =
+                        "No alarm application is available on this device."
+                )
+            }
 
             context.startActivity(
                 intent
@@ -471,20 +488,23 @@ class ActionExecutor(
                 action =
                     request.action,
                 message =
-                    "Alarm set for ${
+                    "Alarm request opened for ${
                         hour.toString()
-                            .padStart(
-                                2,
-                                '0'
-                            )
+                            .padStart(2, '0')
                     }:${
                         minute.toString()
-                            .padStart(
-                                2,
-                                '0'
-                            )
+                            .padStart(2, '0')
                     }.",
-                verified = false
+                verified = false,
+                data =
+                    mapOf(
+                        "hour" to
+                            hour.toString(),
+                        "minute" to
+                            minute.toString(),
+                        "label" to
+                            label
+                    )
             )
 
         } catch (e: Exception) {
@@ -495,7 +515,7 @@ class ActionExecutor(
                 action =
                     request.action,
                 message =
-                    "Unable to set alarm: ${e.message}"
+                    "Unable to open alarm flow: ${e.message}"
             )
         }
     }
@@ -528,6 +548,20 @@ class ActionExecutor(
             )
         }
 
+        if (
+            seconds > Int.MAX_VALUE.toLong()
+        ) {
+
+            return ActionResult(
+                status =
+                    ActionStatus.FAILED,
+                action =
+                    request.action,
+                message =
+                    "Timer duration is too large."
+            )
+        }
+
         return try {
 
             val intent =
@@ -543,20 +577,38 @@ class ActionExecutor(
                     if (
                         label.isNotBlank()
                     ) {
+
                         putExtra(
                             AlarmClock.EXTRA_MESSAGE,
                             label
                         )
                     }
 
-                    putExtra(
-                        AlarmClock.EXTRA_SKIP_UI,
-                        true
-                    )
-
+                    /*
+                     * Do not force skip-UI.
+                     *
+                     * OEM alarm applications may handle the
+                     * ACTION_SET_TIMER contract differently.
+                     */
                     flags =
                         Intent.FLAG_ACTIVITY_NEW_TASK
                 }
+
+            if (
+                intent.resolveActivity(
+                    context.packageManager
+                ) == null
+            ) {
+
+                return ActionResult(
+                    status =
+                        ActionStatus.UNAVAILABLE,
+                    action =
+                        request.action,
+                    message =
+                        "No timer application is available on this device."
+                )
+            }
 
             context.startActivity(
                 intent
@@ -568,8 +620,15 @@ class ActionExecutor(
                 action =
                     request.action,
                 message =
-                    "Timer set for $seconds seconds.",
-                verified = false
+                    "Timer request opened for $seconds seconds.",
+                verified = false,
+                data =
+                    mapOf(
+                        "seconds" to
+                            seconds.toString(),
+                        "label" to
+                            label
+                    )
             )
 
         } catch (e: Exception) {
@@ -580,7 +639,7 @@ class ActionExecutor(
                 action =
                     request.action,
                 message =
-                    "Unable to set timer: ${e.message}"
+                    "Unable to open timer flow: ${e.message}"
             )
         }
     }
