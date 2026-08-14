@@ -26,6 +26,9 @@ import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderF
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.webwithroni.voicejarvis.orb.HumanoidOrbView
+import com.webwithroni.voicejarvis.orb.OrbActivity
+import com.webwithroni.voicejarvis.orb.OrbState
 
 class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
@@ -37,7 +40,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     private lateinit var microcopy: TextView
     private lateinit var muteIcon: ImageView
     private lateinit var muteLabel: TextView
-    private lateinit var orb: OrbView
+    private lateinit var orb: HumanoidOrbView
     private lateinit var orbCenterIcon: ImageView
     private lateinit var waveformLeft: WaveformBarsView
     private lateinit var waveformRight: WaveformBarsView
@@ -179,6 +182,8 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
         muteIcon.setOnClickListener { service?.toggleMute(); reflectMuteUi() }
         muteLabel.setOnClickListener { muteIcon.performClick() }
+
+        syncOrbMotionPreference()
 
         enableMicButton.setOnClickListener {
             if (micPermanentlyDenied) {
@@ -379,6 +384,36 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         setContentView(root)
     }
 
+    /**
+     * Synchronize the new Orb with Android's animation scale.
+     *
+     * animation scale == 0
+     *     -> reduced motion
+     *
+     * animation scale > 0
+     *     -> full motion
+     */
+    private fun syncOrbMotionPreference() {
+
+        val animationScale =
+            try {
+
+                Settings.Global.getFloat(
+                    contentResolver,
+                    Settings.Global.ANIMATOR_DURATION_SCALE,
+                    1f
+                )
+
+            } catch (_: Settings.SettingNotFoundException) {
+
+                1f
+            }
+
+        orb.setReducedMotion(
+            animationScale <= 0f
+        )
+    }
+
     private fun ensurePermissionsThenStart() {
         val needed = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
@@ -404,6 +439,17 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
     }
 
+    override fun onResume() {
+
+        super.onResume()
+
+        if (
+            ::orb.isInitialized
+        ) {
+            syncOrbMotionPreference()
+        }
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != permissionCode) return
@@ -413,9 +459,30 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
             permissionCard.visibility = View.GONE
             startJarvisService()
         } else {
-            micPermanentlyDenied = micIndex != -1 && !ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.RECORD_AUDIO)
-            permissionCard.visibility = View.VISIBLE
-            setJarvisState(JarvisState.ERROR, "TRY AGAIN", "Microphone access is needed to listen.")
+
+            micPermanentlyDenied =
+                micIndex != -1 &&
+                    !ActivityCompat.shouldShowRequestPermissionRationale(
+                        this,
+                        Manifest.permission.RECORD_AUDIO
+                    )
+
+            permissionCard.visibility =
+                View.VISIBLE
+
+            setJarvisState(
+                JarvisState.ERROR,
+                "TRY AGAIN",
+                "Microphone access is needed to listen."
+            )
+
+            orb.setState(
+                OrbState.PERMISSION_REQUIRED
+            )
+
+            orb.setActivity(
+                OrbActivity.NONE
+            )
         }
     }
 
@@ -435,49 +502,197 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         else -> ContextCompat.getColor(this, R.color.accent_cyan)
     }
 
-    private fun setJarvisState(state: JarvisState, label: String, sub: String) {
-        orb.setJarvisState(state)
+    private fun setJarvisState(
+        state: JarvisState,
+        label: String,
+        sub: String
+    ) {
+
+        val orbState =
+            when (state) {
+
+                JarvisState.LISTENING ->
+                    OrbState.LISTENING
+
+                JarvisState.HEARING ->
+                    OrbState.HEARING
+
+                JarvisState.THINKING ->
+                    OrbState.THINKING
+
+                JarvisState.SPEAKING ->
+                    OrbState.SPEAKING
+
+                JarvisState.ERROR ->
+                    OrbState.ERROR
+
+                JarvisState.PAUSED ->
+                    OrbState.PAUSED
+            }
+
+        orb.setState(
+            orbState
+        )
+
+        val orbActivity =
+            when {
+
+                label.trim().equals(
+                    "CONFIRMATION REQUIRED",
+                    ignoreCase = true
+                ) ->
+                    OrbActivity.WAITING_CONFIRMATION
+
+                label.trim().equals(
+                    "DONE",
+                    ignoreCase = true
+                ) ->
+                    OrbActivity.SUCCESS
+
+                else ->
+                    OrbActivity.NONE
+            }
+
+        orb.setActivity(
+            orbActivity
+        )
 
         FirebaseCrashlyticsManager.setJarvisState(
             state.name
         )
 
-        orb.contentDescription = when (state) {
-            JarvisState.LISTENING -> "Jarvis is listening"
-            JarvisState.HEARING -> "Jarvis is hearing your speech"
-            JarvisState.THINKING -> "Jarvis is thinking"
-            JarvisState.SPEAKING -> "Jarvis is speaking"
-            JarvisState.ERROR -> "Jarvis did not understand"
-            JarvisState.PAUSED -> "Jarvis is paused"
-        }
-        stateLabel.text = label
-        stateLabel.setTextColor(stateColor(state))
-        microcopy.text = sub
+        orb.contentDescription =
+            when (state) {
 
-        val color = stateColor(state)
-        waveformLeft.setBarColor(color)
-        waveformRight.setBarColor(color)
+                JarvisState.LISTENING ->
+                    "Jarvis is listening"
 
-        pausedCard.visibility = if (state == JarvisState.PAUSED) View.VISIBLE else View.GONE
-        tipsCard.visibility = if (state == JarvisState.ERROR) View.VISIBLE else View.GONE
-        thinkingCard.visibility = if (state == JarvisState.THINKING) View.VISIBLE else View.GONE
+                JarvisState.HEARING ->
+                    "Jarvis is hearing your speech"
 
-        if (state == JarvisState.PAUSED) {
-            orbCenterIcon.visibility = View.VISIBLE
-            orbCenterIcon.setImageResource(android.R.drawable.ic_media_pause)
-            orbCenterIcon.setColorFilter(ContextCompat.getColor(this, R.color.text_secondary))
-        } else if (permissionCard.visibility == View.VISIBLE) {
-            orbCenterIcon.visibility = View.VISIBLE
-            orbCenterIcon.setImageResource(android.R.drawable.ic_lock_silent_mode)
-            orbCenterIcon.setColorFilter(ContextCompat.getColor(this, R.color.state_error))
+                JarvisState.THINKING ->
+                    "Jarvis is thinking"
+
+                JarvisState.SPEAKING ->
+                    "Jarvis is speaking"
+
+                JarvisState.ERROR ->
+                    "Jarvis did not understand"
+
+                JarvisState.PAUSED ->
+                    "Jarvis is paused"
+            }
+
+        stateLabel.text =
+            label
+
+        stateLabel.setTextColor(
+            stateColor(state)
+        )
+
+        microcopy.text =
+            sub
+
+        val color =
+            stateColor(state)
+
+        waveformLeft.setBarColor(
+            color
+        )
+
+        waveformRight.setBarColor(
+            color
+        )
+
+        pausedCard.visibility =
+            if (
+                state ==
+                    JarvisState.PAUSED
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        tipsCard.visibility =
+            if (
+                state ==
+                    JarvisState.ERROR
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        thinkingCard.visibility =
+            if (
+                state ==
+                    JarvisState.THINKING
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        if (
+            state ==
+                JarvisState.PAUSED
+        ) {
+
+            orbCenterIcon.visibility =
+                View.VISIBLE
+
+            orbCenterIcon.setImageResource(
+                android.R.drawable.ic_media_pause
+            )
+
+            orbCenterIcon.setColorFilter(
+                ContextCompat.getColor(
+                    this,
+                    R.color.text_secondary
+                )
+            )
+
+        } else if (
+            permissionCard.visibility ==
+            View.VISIBLE
+        ) {
+
+            orbCenterIcon.visibility =
+                View.VISIBLE
+
+            orbCenterIcon.setImageResource(
+                android.R.drawable.ic_lock_silent_mode
+            )
+
+            orbCenterIcon.setColorFilter(
+                ContextCompat.getColor(
+                    this,
+                    R.color.state_error
+                )
+            )
+
         } else {
-            orbCenterIcon.visibility = View.GONE
+
+            orbCenterIcon.visibility =
+                View.GONE
         }
 
-        if (state == JarvisState.THINKING) {
-            currentRequestText.text = lastUserTextCache.ifBlank { "—" }
+        if (
+            state ==
+                JarvisState.THINKING
+        ) {
+
+            currentRequestText.text =
+                lastUserTextCache
+                    .ifBlank {
+                        "—"
+                    }
+
             startThinkingChecklist()
+
         } else {
+
             stopThinkingChecklist()
         }
     }
@@ -536,11 +751,60 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         runOnUiThread { setJarvisState(state, label, sub) }
     }
 
-    override fun onAmplitude(level: Float) {
+    override fun onMicAmplitude(
+        level: Float
+    ) {
+
         runOnUiThread {
-            orb.setAmplitude(level)
-            waveformLeft.setLevel(level)
-            waveformRight.setLevel(level)
+
+            /*
+             * Mic signal is meaningful for HEARING.
+             *
+             * OrbAudioReactive inside HumanoidOrbView
+             * performs the visual noise-gate, normalization,
+             * and smoothing.
+             */
+            if (
+                orb.currentState() ==
+                    OrbState.HEARING
+            ) {
+
+                orb.setMicAmplitude(
+                    level
+                )
+            }
+
+            waveformLeft.setLevel(
+                level
+            )
+
+            waveformRight.setLevel(
+                level
+            )
+        }
+    }
+
+    override fun onPlaybackAmplitude(
+        level: Float
+    ) {
+
+        runOnUiThread {
+
+            /*
+             * Playback signal is meaningful for SPEAKING.
+             *
+             * This prevents microphone noise from driving the
+             * speaking animation.
+             */
+            if (
+                orb.currentState() ==
+                    OrbState.SPEAKING
+            ) {
+
+                orb.setPlaybackAmplitude(
+                    level
+                )
+            }
         }
     }
 

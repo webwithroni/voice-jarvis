@@ -81,13 +81,19 @@
             android:layout_weight="1" />
 
         <FrameLayout
-            android:layout_width="240dp"
-            android:layout_height="240dp">
+            android:id="@+id/orbContainer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="3"
+            android:minWidth="240dp"
+            android:minHeight="280dp"
+            android:gravity="center">
 
-            <com.webwithroni.voicejarvis.OrbView
+            <com.webwithroni.voicejarvis.orb.HumanoidOrbView
                 android:id="@+id/orbView"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+                android:layout_height="320dp"
+                android:contentDescription="Jarvis Orb" />
 
             <ImageView
                 android:id="@+id/orbCenterIcon"

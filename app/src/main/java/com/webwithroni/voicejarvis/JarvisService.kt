@@ -51,7 +51,11 @@ class JarvisService : Service() {
             sub: String
         )
 
-        fun onAmplitude(
+        fun onMicAmplitude(
+            level: Float
+        )
+
+        fun onPlaybackAmplitude(
             level: Float
         )
 
@@ -335,7 +339,7 @@ class JarvisService : Service() {
 
                     handler.post {
 
-                        updateAmplitude(
+                        updatePlaybackAmplitude(
                             level * 2.2f
                         )
                     }
@@ -2418,7 +2422,7 @@ class JarvisService : Service() {
             return
         }
 
-        updateAmplitude(
+        updateMicAmplitude(
             level * 3f
         )
 
@@ -2600,11 +2604,20 @@ class JarvisService : Service() {
         )
     }
 
-    private fun updateAmplitude(
+    private fun updateMicAmplitude(
         level: Float
     ) {
 
-        listener?.onAmplitude(
+        listener?.onMicAmplitude(
+            level
+        )
+    }
+
+    private fun updatePlaybackAmplitude(
+        level: Float
+    ) {
+
+        listener?.onPlaybackAmplitude(
             level
         )
     }
