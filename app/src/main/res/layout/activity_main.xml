@@ -5,13 +5,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_canvas"
+    android:background="@color/vj_bg_canvas"
+    android:clipToPadding="false"
     android:paddingStart="20dp"
     android:paddingEnd="20dp"
     android:paddingTop="12dp"
-    android:paddingBottom="18dp">
+    android:paddingBottom="16dp">
 
-    <!-- HEADER -->
+    <!-- ===================================================== -->
+    <!-- HEADER                                                -->
+    <!-- ===================================================== -->
 
     <ImageView
         android:id="@+id/headerLogo"
@@ -24,13 +27,11 @@
 
     <TextView
         android:id="@+id/jarvisBrand"
+        style="@style/VJTextTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="10dp"
         android:text="JARVIS"
-        android:textColor="@color/text_primary"
-        android:textSize="18sp"
-        android:textStyle="bold"
         android:letterSpacing="0.18"
         app:layout_constraintStart_toEndOf="@id/headerLogo"
         app:layout_constraintTop_toTopOf="@id/headerLogo"
@@ -38,114 +39,96 @@
 
     <ImageButton
         android:id="@+id/settingsButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="@dimen/vj_min_touch_target"
+        android:layout_height="@dimen/vj_min_touch_target"
         android:padding="12dp"
         android:background="@drawable/vj_icon_button_background"
         android:src="@drawable/ic_settings"
-        android:tint="@color/text_primary"
+        android:tint="@color/vj_text_primary"
         android:contentDescription="Settings"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
     <ImageButton
         android:id="@+id/historyButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="@dimen/vj_min_touch_target"
+        android:layout_height="@dimen/vj_min_touch_target"
         android:layout_marginEnd="10dp"
         android:padding="12dp"
         android:background="@drawable/vj_icon_button_background"
         android:src="@drawable/ic_history"
-        android:tint="@color/text_primary"
+        android:tint="@color/vj_text_primary"
         android:contentDescription="Conversation History"
         app:layout_constraintEnd_toStartOf="@id/settingsButton"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- ORB -->
+    <!-- ===================================================== -->
+    <!-- PRIMARY ORB STAGE                                    -->
+    <!-- ===================================================== -->
 
-    <LinearLayout
-        android:id="@+id/orbRow"
+    <FrameLayout
+        android:id="@+id/orbStage"
         android:layout_width="0dp"
-        android:layout_height="260dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="18dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         app:layout_constraintTop_toBottomOf="@id/jarvisBrand"
+        app:layout_constraintBottom_toTopOf="@id/stateLabel"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <com.webwithroni.voicejarvis.WaveformBarsView
-            android:id="@+id/waveformLeft"
-            android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_weight="1" />
+        <com.webwithroni.voicejarvis.orb.HumanoidOrbView
+            android:id="@+id/orbView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="Jarvis Orb" />
 
-        <FrameLayout
-            android:id="@+id/orbContainer"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="3"
-            android:minWidth="240dp"
-            android:minHeight="280dp"
-            android:gravity="center">
+        <ImageView
+            android:id="@+id/orbCenterIcon"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:padding="14dp"
+            android:visibility="gone"
+            android:contentDescription="Jarvis status icon" />
 
-            <com.webwithroni.voicejarvis.orb.HumanoidOrbView
-                android:id="@+id/orbView"
-                android:layout_width="match_parent"
-                android:layout_height="320dp"
-                android:contentDescription="Jarvis Orb" />
+    </FrameLayout>
 
-            <ImageView
-                android:id="@+id/orbCenterIcon"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_gravity="center"
-                android:padding="14dp"
-                android:visibility="gone"
-                android:contentDescription="Jarvis status icon" />
-
-        </FrameLayout>
-
-        <com.webwithroni.voicejarvis.WaveformBarsView
-            android:id="@+id/waveformRight"
-            android:layout_width="0dp"
-            android:layout_height="46dp"
-            android:layout_weight="1"
-            android:scaleX="-1" />
-
-    </LinearLayout>
-
-    <!-- STATE -->
+    <!-- ===================================================== -->
+    <!-- STATE INDICATOR                                      -->
+    <!-- ===================================================== -->
 
     <TextView
         android:id="@+id/stateLabel"
+        style="@style/VJStateLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="-2dp"
         android:background="@drawable/vj_state_pill"
-        android:fontFamily="sans"
-        android:letterSpacing="0.10"
+        android:paddingStart="14dp"
+        android:paddingTop="7dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="7dp"
         android:text="LISTENING"
-        android:textColor="@color/accent_cyan"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        app:layout_constraintTop_toBottomOf="@id/orbRow"
+        app:layout_constraintTop_toBottomOf="@id/orbStage"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <TextView
         android:id="@+id/microcopy"
+        style="@style/VJTextBody"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="I'm listening."
-        android:textColor="@color/text_secondary"
-        android:textSize="15sp"
         app:layout_constraintTop_toBottomOf="@id/stateLabel"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- CONTENT -->
+    <!-- ===================================================== -->
+    <!-- CONTENT                                                -->
+    <!-- ===================================================== -->
 
     <ScrollView
         android:id="@+id/contentScroll"
@@ -154,6 +137,7 @@
         android:layout_marginTop="18dp"
         android:clipToPadding="false"
         android:fillViewport="false"
+        android:scrollbars="none"
         app:layout_constraintTop_toBottomOf="@id/microcopy"
         app:layout_constraintBottom_toTopOf="@id/muteIcon"
         app:layout_constraintStart_toStartOf="parent"
@@ -172,53 +156,56 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/vj_surface"
                 android:orientation="vertical"
-                android:padding="18dp"
+                android:padding="@dimen/vj_card_padding"
                 android:visibility="gone">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="CURRENT REQUEST"
-                    android:textColor="@color/accent_violet"
-                    android:textSize="12sp"
+                    style="@style/VJTextCaption"
+                    android:textColor="@color/vj_violet"
                     android:textStyle="bold"
                     android:letterSpacing="0.10" />
 
                 <TextView
                     android:id="@+id/currentRequestText"
+                    style="@style/VJTextBody"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:text="—"
-                    android:textColor="@color/text_primary"
-                    android:textSize="16sp" />
+                    android:lineSpacingExtra="4dp" />
 
                 <TextView
                     android:id="@+id/processStep0"
+                    style="@style/VJTextSecondary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:text="○  Understanding your question"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp" />
+                    android:textColor="@color/vj_text_secondary"
+                    />
 
                 <TextView
                     android:id="@+id/processStep1"
+                    style="@style/VJTextSecondary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="○  Working on it"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp" />
+                    android:textColor="@color/vj_text_secondary"
+                    />
 
                 <TextView
                     android:id="@+id/processStep2"
+                    style="@style/VJTextSecondary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="○  Preparing response"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp" />
+                    android:textColor="@color/vj_text_secondary"
+                    />
 
             </LinearLayout>
 
@@ -230,24 +217,25 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/vj_surface"
                 android:orientation="vertical"
-                android:padding="18dp"
+                android:padding="@dimen/vj_card_padding"
                 android:visibility="gone">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="JARVIS IS PAUSED"
-                    android:textColor="@color/state_muted"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
+                    style="@style/VJTextCaption"
+                    android:textColor="@color/vj_state_paused"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="Resume whenever you're ready."
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp" />
+
+                    style="@style/VJTextSecondary" />
 
             </LinearLayout>
 
@@ -259,24 +247,26 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/vj_surface"
                 android:orientation="vertical"
-                android:padding="18dp"
+                android:padding="@dimen/vj_card_padding"
                 android:visibility="gone">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="DIDN'T CATCH THAT"
-                    android:textColor="@color/state_error"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
+                    style="@style/VJTextCaption"
+                    android:textColor="@color/vj_state_error"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="Try again naturally. You can speak in English, Hindi, Bengali or Hinglish."
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp" />
+
+                    style="@style/VJTextSecondary"
+                    android:lineSpacingExtra="3dp" />
 
             </LinearLayout>
 
@@ -296,7 +286,7 @@
                     android:layout_height="wrap_content"
                     android:background="@drawable/vj_surface"
                     android:orientation="vertical"
-                    android:padding="16dp"
+                    android:padding="@dimen/vj_card_padding"
                     android:layout_marginBottom="10dp"
                     android:visibility="gone">
 
@@ -315,8 +305,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:text="YOU"
-                            android:textColor="@color/text_tertiary"
-                            android:textSize="12sp"
+                            style="@style/VJTextCaption"
                             android:textStyle="bold" />
 
                         <TextView
@@ -324,18 +313,18 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
-                            android:textColor="@color/text_tertiary"
-                            android:textSize="11sp" />
+                            style="@style/VJTextCaption" />
 
                     </LinearLayout>
 
                     <TextView
                         android:id="@+id/userBubble"
+                        style="@style/VJTextBody"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textSize="16sp"
+                        android:textColor="@color/vj_text_primary"
+
                         android:lineSpacingExtra="4dp" />
 
                 </LinearLayout>
@@ -346,7 +335,7 @@
                     android:layout_height="wrap_content"
                     android:background="@drawable/vj_surface"
                     android:orientation="vertical"
-                    android:padding="16dp"
+                    android:padding="@dimen/vj_card_padding"
                     android:visibility="gone">
 
                     <LinearLayout
@@ -364,8 +353,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:text="JARVIS"
-                            android:textColor="@color/text_tertiary"
-                            android:textSize="12sp"
+                            style="@style/VJTextCaption"
                             android:textStyle="bold" />
 
                         <TextView
@@ -373,18 +361,18 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
-                            android:textColor="@color/text_tertiary"
-                            android:textSize="11sp" />
+                            style="@style/VJTextCaption" />
 
                     </LinearLayout>
 
                     <TextView
                         android:id="@+id/jarvisBubble"
+                        style="@style/VJTextBody"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textSize="16sp"
+                        android:textColor="@color/vj_text_primary"
+
                         android:lineSpacingExtra="4dp" />
 
                 </LinearLayout>
@@ -395,15 +383,15 @@
                 android:id="@+id/debugScroll"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:visibility="gone">
+                android:visibility="gone"
+                android:scrollbars="none">
 
                 <TextView
                     android:id="@+id/statusText"
+                    style="@style/VJTextCaption"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="16dp"
-                    android:textColor="@color/text_tertiary"
-                    android:textSize="11sp"
                     android:lineSpacingExtra="3dp" />
 
             </ScrollView>
@@ -411,13 +399,15 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- PERMISSION TAKEOVER -->
+    <!-- ===================================================== -->
+    <!-- PERMISSION TAKEOVER                                  -->
+    <!-- ===================================================== -->
 
     <LinearLayout
         android:id="@+id/permissionCard"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="@color/bg_canvas"
+        android:background="@color/vj_bg_canvas"
         android:gravity="center"
         android:orientation="vertical"
         android:padding="28dp"
@@ -439,8 +429,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:text="MICROPHONE ACCESS NEEDED"
-            android:textColor="@color/state_error"
-            android:textSize="18sp"
+            style="@style/VJTextHeading"
+            android:textColor="@color/vj_state_error"
             android:textStyle="bold"
             android:letterSpacing="0.06" />
 
@@ -450,22 +440,25 @@
             android:layout_marginTop="12dp"
             android:gravity="center"
             android:text="Jarvis needs microphone access to hear and respond to you."
-            android:textColor="@color/text_secondary"
-            android:textSize="15sp" />
+
+            style="@style/VJTextBody"
+            android:lineSpacingExtra="3dp" />
 
         <Button
             android:id="@+id/enableMicButton"
+            style="@style/VJButton"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="@dimen/vj_button_height"
             android:layout_marginTop="24dp"
             android:text="ENABLE MICROPHONE"
-            android:textStyle="bold"
-            android:textColor="@color/bg_canvas"
+            android:textColor="@color/vj_bg_canvas"
             android:background="@drawable/vj_button_primary" />
 
     </LinearLayout>
 
-    <!-- MUTE -->
+    <!-- ===================================================== -->
+    <!-- BOTTOM CONTROL                                       -->
+    <!-- ===================================================== -->
 
     <ImageView
         android:id="@+id/muteIcon"
@@ -483,12 +476,11 @@
 
     <TextView
         android:id="@+id/muteLabel"
+        style="@style/VJTextCaption"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="MUTE"
-        android:textColor="@color/text_secondary"
-        android:textSize="13sp"
         android:textStyle="bold"
         android:letterSpacing="0.10"
         app:layout_constraintBottom_toBottomOf="parent"

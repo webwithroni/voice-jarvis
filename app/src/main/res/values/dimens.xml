@@ -1,4 +1,6 @@
 <resources>
+
+    <!-- Non-VJ application dimensions -->
     <dimen name="space_4">4dp</dimen>
     <dimen name="space_8">8dp</dimen>
     <dimen name="space_12">12dp</dimen>
@@ -18,4 +20,7 @@
     <dimen name="orb_core">112dp</dimen>
     <dimen name="orb_ring">176dp</dimen>
     <dimen name="orb_atmosphere">240dp</dimen>
+
+    <!-- Canonical JARVIS V2 dimensions are defined in
+         voice_jarvis_design.xml. -->
 </resources>

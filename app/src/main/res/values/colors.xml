@@ -1,4 +1,6 @@
 <resources>
+
+    <!-- Non-VJ application colors -->
     <color name="bg_canvas">#07090D</color>
     <color name="bg_surface">#0D1118</color>
     <color name="bg_surface_elevated">#121821</color>
@@ -10,4 +12,7 @@
     <color name="accent_violet">#9B7CFF</color>
     <color name="state_error">#FF7181</color>
     <color name="state_muted">#414A58</color>
-    <color name="vj_border">#202733</color>\n    <color name="vj_border_soft">#17202C</color>\n</resources>
+
+    <!-- Canonical JARVIS V2 tokens are defined in
+         voice_jarvis_design.xml. -->
+</resources>

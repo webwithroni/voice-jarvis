@@ -42,8 +42,6 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     private lateinit var muteLabel: TextView
     private lateinit var orb: HumanoidOrbView
     private lateinit var orbCenterIcon: ImageView
-    private lateinit var waveformLeft: WaveformBarsView
-    private lateinit var waveformRight: WaveformBarsView
     private lateinit var conversationCard: View
     private lateinit var userBlock: View
     private lateinit var jarvisBlock: View
@@ -159,8 +157,6 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         muteLabel = findViewById(R.id.muteLabel)
         orb = findViewById(R.id.orbView)
         orbCenterIcon = findViewById(R.id.orbCenterIcon)
-        waveformLeft = findViewById(R.id.waveformLeft)
-        waveformRight = findViewById(R.id.waveformRight)
         conversationCard = findViewById(R.id.conversationCard)
         userBlock = findViewById(R.id.userBlock)
         jarvisBlock = findViewById(R.id.jarvisBlock)
@@ -596,13 +592,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         val color =
             stateColor(state)
 
-        waveformLeft.setBarColor(
-            color
-        )
 
-        waveformRight.setBarColor(
-            color
-        )
 
         pausedCard.visibility =
             if (
@@ -774,13 +764,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
                 )
             }
 
-            waveformLeft.setLevel(
-                level
-            )
 
-            waveformRight.setLevel(
-                level
-            )
         }
     }
 
