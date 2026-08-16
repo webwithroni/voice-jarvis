@@ -35,6 +35,7 @@ class JarvisScreensActivity : AppCompatActivity() {
         const val DETAIL = "detail"
         const val SETTINGS = "settings"
         const val VOICE = "voice"
+        const val TOOLS = "tools"
         const val ONBOARDING = "onboarding"
         const val MICROPHONE = "microphone"
         const val CALL = "call"
@@ -107,6 +108,10 @@ class JarvisScreensActivity : AppCompatActivity() {
 
             VOICE ->
                 showVoice()
+
+            TOOLS ->
+                showTools()
+
 
             ONBOARDING ->
                 showOnboarding()
@@ -2264,6 +2269,462 @@ class JarvisScreensActivity : AppCompatActivity() {
         )
 
         renderVoices()
+
+        setContentView(
+            page
+        )
+    }
+
+    private fun showTools() {
+
+        val page =
+            root()
+
+        val body =
+            content(page)
+
+        body.addView(
+            header(
+                "Tools",
+                "Your Jarvis capability control room."
+            ),
+            lp(
+                bottom = 18
+            )
+        )
+
+        /*
+         * --------------------------------------------------
+         * CORE
+         * --------------------------------------------------
+         */
+        body.addView(
+            sectionTitle(
+                "CORE",
+                cyan
+            ),
+            lp()
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_mic,
+                "Voice",
+                "Gemini Live realtime voice",
+                cyan
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Search",
+                "Web search and information retrieval",
+                blue
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Research",
+                "Multi-step research and synthesis",
+                violet
+            ),
+            lp(
+                bottom = 18
+            )
+        )
+
+        /*
+         * --------------------------------------------------
+         * DEVICE
+         * --------------------------------------------------
+         */
+        body.addView(
+            sectionTitle(
+                "DEVICE",
+                green
+            ),
+            lp()
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Apps",
+                "Open installed Android applications",
+                green
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Flashlight",
+                "Control the device torch",
+                green
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Volume",
+                "Control media volume",
+                green
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Media",
+                "Play, pause, next, previous and stop",
+                green
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Alarm & Timer",
+                "Create alarms and countdown timers",
+                orange
+            ),
+            lp(
+                bottom = 18
+            )
+        )
+
+        /*
+         * --------------------------------------------------
+         * COMMUNICATION
+         * --------------------------------------------------
+         */
+        body.addView(
+            sectionTitle(
+                "COMMUNICATION",
+                blue
+            ),
+            lp()
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_phone,
+                "Calls",
+                "Call and call-control capabilities",
+                blue
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_message,
+                "SMS",
+                "Prepare and send messages with confirmation",
+                blue
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_message,
+                "WhatsApp",
+                "Prepare WhatsApp messages",
+                green
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Contacts",
+                "Find contact information",
+                blue
+            ),
+            lp(
+                bottom = 18
+            )
+        )
+
+        /*
+         * --------------------------------------------------
+         * SCREEN CONTROL
+         * --------------------------------------------------
+         */
+        body.addView(
+            sectionTitle(
+                "SCREEN CONTROL",
+                violet
+            ),
+            lp()
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_accessibility,
+                "Read Screen",
+                "Inspect the current screen",
+                violet
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_accessibility,
+                "Tap",
+                "Tap a discovered screen element",
+                violet
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_accessibility,
+                "Type",
+                "Enter text into supported fields",
+                violet
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_accessibility,
+                "Scroll",
+                "Scroll vertically through the current screen",
+                violet
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_accessibility,
+                "Back / Home",
+                "Navigate the Android interface",
+                violet
+            ),
+            lp(
+                bottom = 18
+            )
+        )
+
+        /*
+         * --------------------------------------------------
+         * WEB & LOCATION
+         * --------------------------------------------------
+         */
+        body.addView(
+            sectionTitle(
+                "WEB & LOCATION",
+                cyan
+            ),
+            lp()
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Browser",
+                "Open the default browser",
+                cyan
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Google Search",
+                "Search Google and show results",
+                cyan
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Navigation",
+                "Start Google Maps navigation",
+                cyan
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Location",
+                "Use device location when available",
+                cyan
+            ),
+            lp(
+                bottom = 18
+            )
+        )
+
+        /*
+         * --------------------------------------------------
+         * SYSTEM
+         * --------------------------------------------------
+         */
+        body.addView(
+            sectionTitle(
+                "SYSTEM",
+                orange
+            ),
+            lp()
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_message,
+                "Clipboard",
+                "Copy content to the device clipboard",
+                orange
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_accessibility,
+                "Accessibility",
+                "Enable screen automation and device control",
+                violet
+            ) {
+                openRoute(
+                    ACCESSIBILITY
+                )
+            },
+            lp(
+                bottom = 18
+            )
+        )
+
+        /*
+         * --------------------------------------------------
+         * SAFETY NOTE
+         * --------------------------------------------------
+         */
+        val safetyCard =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+
+                setPadding(
+                    dp(16),
+                    dp(14),
+                    dp(16),
+                    dp(14)
+                )
+
+                background =
+                    surfaceBackground(
+                        surface,
+                        20f,
+                        border
+                    )
+
+                addView(
+                    TextView(
+                        this@JarvisScreensActivity
+                    ).apply {
+                        text =
+                            "ACTION SAFETY"
+
+                        textSize =
+                            12f
+
+                        typeface =
+                            Typeface.DEFAULT_BOLD
+
+                        setTextColor(
+                            orange
+                        )
+                    }
+                )
+
+                addView(
+                    TextView(
+                        this@JarvisScreensActivity
+                    ).apply {
+                        text =
+                            "Sensitive actions may require Android permissions or an explicit confirmation before execution."
+
+                        textSize =
+                            13f
+
+                        setTextColor(
+                            secondary
+                        )
+
+                        setPadding(
+                            0,
+                            dp(6),
+                            0,
+                            0
+                        )
+                    }
+                )
+            }
+
+        body.addView(
+            safetyCard,
+            lp(
+                bottom = 24
+            )
+        )
 
         setContentView(
             page

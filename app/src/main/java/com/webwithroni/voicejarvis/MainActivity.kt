@@ -59,6 +59,10 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     private lateinit var processStep2: TextView
     private lateinit var permissionCard: View
     private lateinit var enableMicButton: Button
+    private lateinit var connectionLabel: TextView
+    private lateinit var orbModeLabel: TextView
+    private lateinit var homeHistoryHint: TextView
+    private lateinit var homeToolsHint: TextView
 
     private var service: JarvisService? = null
     private var bound = false
@@ -174,6 +178,19 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         processStep2 = findViewById(R.id.processStep2)
         permissionCard = findViewById(R.id.permissionCard)
         enableMicButton = findViewById(R.id.enableMicButton)
+
+        connectionLabel =
+            findViewById(R.id.connectionLabel)
+
+        orbModeLabel =
+            findViewById(R.id.orbModeLabel)
+
+        homeHistoryHint =
+            findViewById(R.id.homeHistoryHint)
+
+        homeToolsHint =
+            findViewById(R.id.homeToolsHint)
+
         statusText.setTextIsSelectable(true)
 
         muteIcon.setOnClickListener { service?.toggleMute(); reflectMuteUi() }
@@ -202,14 +219,15 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         }
 
         findViewById<View>(R.id.historyButton).setOnClickListener {
-            startActivity(
-                Intent(this, JarvisScreensActivity::class.java).apply {
-                    putExtra(
-                        JarvisScreensActivity.ROUTE,
-                        JarvisScreensActivity.HISTORY
-                    )
-                }
-            )
+            openHistory()
+        }
+
+        homeHistoryHint.setOnClickListener {
+            openHistory()
+        }
+
+        homeToolsHint.setOnClickListener {
+            openTools()
         }
         findViewById<View>(R.id.jarvisBrand).setOnLongClickListener {
             debugVisible = !debugVisible
@@ -482,6 +500,34 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         }
     }
 
+    private fun openTools() {
+        startActivity(
+            Intent(
+                this,
+                JarvisScreensActivity::class.java
+            ).apply {
+                putExtra(
+                    JarvisScreensActivity.ROUTE,
+                    JarvisScreensActivity.TOOLS
+                )
+            }
+        )
+    }
+
+    private fun openHistory() {
+        startActivity(
+            Intent(
+                this,
+                JarvisScreensActivity::class.java
+            ).apply {
+                putExtra(
+                    JarvisScreensActivity.ROUTE,
+                    JarvisScreensActivity.HISTORY
+                )
+            }
+        )
+    }
+
     private fun reflectMuteUi() {
         val svc = service ?: return
         muteLabel.text = if (svc.isPaused) "RESUME" else "MUTE"
@@ -588,6 +634,62 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
         microcopy.text =
             sub
+
+        /*
+         * Home V2 system metadata.
+         *
+         * Header communicates the runtime connection role.
+         * Orb label communicates the current visual/interaction mode.
+         */
+        val homeConnection =
+            when (state) {
+
+                JarvisState.LISTENING ->
+                    "VOICE • READY"
+
+                JarvisState.HEARING ->
+                    "VOICE • ACTIVE"
+
+                JarvisState.THINKING ->
+                    "VOICE • PROCESSING"
+
+                JarvisState.SPEAKING ->
+                    "VOICE • SPEAKING"
+
+                JarvisState.ERROR ->
+                    "VOICE • RECOVERY"
+
+                JarvisState.PAUSED ->
+                    "VOICE • PAUSED"
+            }
+
+        val homeOrbMode =
+            when (state) {
+
+                JarvisState.LISTENING ->
+                    "NEURAL CORE"
+
+                JarvisState.HEARING ->
+                    "VOICE INPUT"
+
+                JarvisState.THINKING ->
+                    "COGNITIVE PROCESS"
+
+                JarvisState.SPEAKING ->
+                    "VOICE OUTPUT"
+
+                JarvisState.ERROR ->
+                    "RECOVERY"
+
+                JarvisState.PAUSED ->
+                    "STANDBY"
+            }
+
+        connectionLabel.text =
+            homeConnection
+
+        orbModeLabel.text =
+            homeOrbMode
 
         val color =
             stateColor(state)
