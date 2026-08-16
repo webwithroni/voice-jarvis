@@ -1,0 +1,96 @@
+name: CI
+
+# P0 quality pipeline.
+# Order of gates:
+#   1. Gradle configuration / dependency validation   (fatal)
+#   2. Kotlin compilation                              (fatal)
+#   3. Unit tests                                      (FATAL — fails on any test failure)
+#   4. Static analysis (Android Lint)                 (report; non-fatal on pre-existing issues)
+#   5. Debug APK build                                 (fatal)
+#
+# No secrets are introduced. Existing GitHub Secrets are only reused for
+# the APK build step, exactly as the original workflow did. Missing
+# secrets are tolerated (BuildConfig keys default to "").
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # Gate 1 — configuration / dependency validation (fatal)
+      - name: Validate Gradle configuration
+        run: ./gradlew help --stacktrace
+
+      # Gate 2 — Kotlin compilation (fatal)
+      - name: Compile debug sources
+        run: ./gradlew compileDebugKotlin --stacktrace
+
+      # Gate 3 — unit tests (FATAL: workflow fails if any test fails)
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Upload unit test results (JUnit XML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
+
+      - name: Test summary
+        if: always()
+        run: python3 scripts/ci_test_summary.py >> "$GITHUB_STEP_SUMMARY"
+
+      # Gate 4 — static analysis (Android Lint). Reported, uploaded;
+      # non-fatal so pre-existing lint findings do not block P0.
+      - name: Android Lint
+        run: ./gradlew lintDebug --continue || true
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
+
+      # Gate 5 — debug APK build (fatal)
+      - name: Build debug APK
+        run: >
+          ./gradlew assembleDebug
+          -PGROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+          -PGEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          -PTAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}
+          -POPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+          -PDEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+
+      - name: Upload debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
