@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/vj_bg_canvas"
+    android:paddingStart="@dimen/vj_screen_horizontal"
+    android:paddingEnd="@dimen/vj_screen_horizontal"
+    android:paddingTop="28dp"
+    android:paddingBottom="24dp">
+
+    <TextView
+        android:id="@+id/onboardingStep"
+        style="@style/VJTextCaption"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="01 / 03"
+        android:textColor="@color/vj_cyan"
+        android:textStyle="bold"
+        android:letterSpacing="0.12"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <TextView
+        android:id="@+id/onboardingSkip"
+        style="@style/VJTextCaption"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="SKIP"
+        android:textColor="@color/vj_text_tertiary"
+        android:textStyle="bold"
+        android:letterSpacing="0.10"
+        android:clickable="true"
+        android:focusable="true"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <FrameLayout
+        android:id="@+id/onboardingOrbStage"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="8dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        app:layout_constraintTop_toBottomOf="@id/onboardingStep"
+        app:layout_constraintBottom_toTopOf="@id/onboardingContent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.webwithroni.voicejarvis.orb.HumanoidOrbView
+            android:id="@+id/onboardingOrb"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="JARVIS neural orb" />
+
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/onboardingContent"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        app:layout_constraintBottom_toTopOf="@id/onboardingActions"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/onboardingEyebrow"
+            style="@style/VJTextCaption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MEET JARVIS"
+            android:textColor="@color/vj_violet"
+            android:textStyle="bold"
+            android:letterSpacing="0.12" />
+
+        <TextView
+            android:id="@+id/onboardingTitle"
+            style="@style/VJTextHeading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="A voice system built around you."
+            android:textSize="23sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/onboardingBody"
+            style="@style/VJTextSecondary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="Talk naturally, get useful answers, and let JARVIS help with the things you actually do."
+            android:lineSpacingExtra="4dp" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/onboardingActions"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <Button
+            android:id="@+id/onboardingPrimary"
+            style="@style/VJButton"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/vj_button_height"
+            android:background="@drawable/vj_button_primary"
+            android:text="Continue"
+            android:textColor="@color/vj_bg_canvas"
+            android:textStyle="bold"
+            android:textAllCaps="false" />
+
+        <TextView
+            android:id="@+id/onboardingHint"
+            style="@style/VJTextCaption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:text="You can change permissions and preferences later in Settings."
+            android:textColor="@color/vj_text_tertiary" />
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

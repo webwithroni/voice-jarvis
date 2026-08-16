@@ -101,8 +101,10 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         CrashLogger.install(this)
 
         /*
-         * Firebase authentication runs in the background.
-         * It must never block Jarvis voice startup.
+         * Firebase services initialize in the background.
+         *
+         * Authentication is owned by AuthManager and is handled
+         * before the Home surface is allowed to start.
          *
          * Conversation sessions are created later,
          * when an actual voice interaction begins.
@@ -149,6 +151,28 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
         if (CrashLogger.hasCrashLog(this)) {
             showCrashRecovery()
+            return
+        }
+
+        AuthManager.initialize(
+            this
+        )
+
+        /*
+         * Authentication gate.
+         *
+         * MainActivity is the Home surface and must never become
+         * the first-run auth surface.
+         *
+         * Any non-Google Firebase identity is redirected here so
+         * AuthManager can complete the Google account transition
+         * before the Home surface starts.
+         */
+        if (
+            !AuthManager.isSignedIn() ||
+            AuthManager.isAnonymous()
+        ) {
+            openAuthentication()
             return
         }
 
@@ -498,6 +522,21 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
                 OrbActivity.NONE
             )
         }
+    }
+
+    private fun openAuthentication() {
+        startActivity(
+            Intent(
+                this,
+                AuthActivity::class.java
+            ).apply {
+                flags =
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+        )
+
+        finish()
     }
 
     private fun openTools() {

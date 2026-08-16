@@ -12,7 +12,20 @@
           "package_name": "com.webwithroni.voicejarvis"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "218806291908-8me2fefeent49pr6jt6jkbj349v43f6m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.webwithroni.voicejarvis",
+            "certificate_hash": "5a4c32dc0614ae7b67cb30a2b551542d297070b5"
+          }
+        },
+        {
+          "client_id": "218806291908-9he1p60g712662df8cm0mgbb0qjjbmta.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBQe-L_A8EXeN6-vnZnqgR7PknfJsmLzBI"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "218806291908-9he1p60g712662df8cm0mgbb0qjjbmta.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

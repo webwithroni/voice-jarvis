@@ -46,7 +46,13 @@ object FirebaseManager {
     private const val PREF_TELEMETRY_ENABLED = "telemetry_enabled"
 
     /**
-     * Initialize Firebase and establish an anonymous identity.
+     * Initialize Firebase services without creating a user identity.
+     *
+     * Authentication is owned by AuthManager.
+     *
+     * An already-authenticated Firebase user is preserved, including
+     * an existing anonymous user during the Google-account migration.
+     * New anonymous identities are never created here.
      */
     fun initialize(
         context: Context? = null,
@@ -67,27 +73,22 @@ object FirebaseManager {
                     true
                 ) ?: true
         }
-        if (initialized && auth.currentUser != null) {
-            onComplete?.invoke(true)
-            return
-        }
 
         initialized = true
 
-        if (auth.currentUser != null) {
-            onComplete?.invoke(true)
-            return
+        val authenticated =
+            auth.currentUser != null
+
+        if (!authenticated) {
+            Log.d(
+                TAG,
+                "Firebase ready without an authenticated user."
+            )
         }
 
-        auth.signInAnonymously()
-            .addOnSuccessListener {
-                Log.d(TAG, "Anonymous Firebase identity established.")
-                onComplete?.invoke(true)
-            }
-            .addOnFailureListener { error ->
-                Log.e(TAG, "Firebase anonymous auth failed", error)
-                onComplete?.invoke(false)
-            }
+        onComplete?.invoke(
+            authenticated
+        )
     }
 
     /**
@@ -130,8 +131,8 @@ object FirebaseManager {
      * Ensure that a conversation exists.
      *
      * Safe to call repeatedly from the voice pipeline.
-     * If Firebase authentication is not ready yet, this simply
-     * returns null and voice continues normally.
+     * If there is no authenticated Firebase user yet, this simply
+     * returns null and the voice pipeline continues normally.
      */
     fun ensureConversationStarted(
         source: String = "voice"
