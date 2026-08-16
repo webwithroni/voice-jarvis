@@ -62,6 +62,25 @@ class OrbParticleSystem(
     private var audioAmplitude =
         0f
 
+    /**
+     * Motion envelope supplied by OrbMotionController.
+     *
+     * These values let the particle field breathe, expand and
+     * distort with the Orb instead of behaving as an independent
+     * animation.
+     */
+    private var breath =
+        0f
+
+    private var pulse =
+        0f
+
+    private var fieldWarp =
+        0f
+
+    private var audioEnergy =
+        0f
+
     private var rotationDirection =
         1f
 
@@ -79,6 +98,10 @@ class OrbParticleSystem(
         elapsedSeconds = 0f
         activityIntensity = 1f
         audioAmplitude = 0f
+        breath = 0f
+        pulse = 0f
+        fieldWarp = 0f
+        audioEnergy = 0f
         rotationDirection = 1f
 
         repeat(config.particleCount) {
@@ -130,11 +153,58 @@ class OrbParticleSystem(
                     1.5f
                 )
 
+        /*
+         * Organic field motion.
+         *
+         * Breath affects the entire field.
+         * Audio adds perceptual expansion.
+         * Pulse adds tiny rhythmic movement.
+         * Field warp becomes more noticeable during thinking,
+         * speaking and error states.
+         */
+        val breathingExpansion =
+            1f +
+                breath *
+                    config.breathDepth *
+                    1.35f
+
+        val pulseExpansion =
+            1f +
+                pulse *
+                    config.idlePulseDepth *
+                    0.75f
+
+        val audioExpansion =
+            1f +
+                audioEnergy *
+                    config.particleAudioScale
+
+        val fieldExpansion =
+            (
+                breathingExpansion *
+                    pulseExpansion *
+                    audioExpansion
+                )
+                .coerceIn(
+                    0.96f,
+                    1.22f
+                )
+
+        val turbulence =
+            fieldWarp.coerceIn(
+                0f,
+                1.5f
+            )
+
         val globalAngularSpeed =
             config.baseRotationSpeed *
                 stateSpeed *
                 activityIntensity *
-                (1f + audioBoost * 0.35f) *
+                (
+                    1f +
+                        audioBoost * 0.35f +
+                        turbulence * 0.12f
+                    ) *
                 rotationDirection
 
         for (particle in particles) {
@@ -144,10 +214,28 @@ class OrbParticleSystem(
                     globalAngularSpeed *
                     dt
 
+            /*
+             * Base radial movement plus the new organic field.
+             */
             particle.orbitRadius +=
                 particle.radialVelocity *
                     activityIntensity *
                     dt
+
+            particle.orbitRadius =
+                (
+                    particle.orbitRadius *
+                        (
+                            1f +
+                                (
+                                    fieldExpansion -
+                                        1f
+                                ) *
+                                0.020f *
+                                dt
+                        )
+                    )
+
 
             /*
              * Keep particles inside a bounded orbital region.
@@ -208,12 +296,77 @@ class OrbParticleSystem(
                     OrbState.SPEAKING
             ) {
 
+                /*
+                 * Strong speech creates an outward energy impulse.
+                 */
+                val speechImpulse =
+                    audioEnergy *
+                        config.particleAudioScale *
+                        when (state) {
+
+                            OrbState.SPEAKING ->
+                                1.45f
+
+                            else ->
+                                0.85f
+                        }
+
                 particle.orbitRadius *=
                     1f +
-                        audioBoost *
-                        0.018f *
+                        speechImpulse *
                         dt
             }
+
+            /*
+             * Thinking creates controlled turbulence.
+             *
+             * Each particle gets a different phase so the field
+             * never looks like one synchronized sine wave.
+             */
+            if (
+                state ==
+                    OrbState.THINKING &&
+                turbulence > 0f
+            ) {
+
+                val turbulenceWave =
+                    sin(
+                        elapsedSeconds *
+                            (
+                                1.10f +
+                                    particle.angularVelocity *
+                                    0.80f
+                                ) +
+                            particle.phase
+                    )
+
+                particle.angle +=
+                    turbulenceWave *
+                        turbulence *
+                        0.10f *
+                        dt
+
+                particle.orbitRadius *=
+                    1f +
+                        turbulenceWave *
+                        turbulence *
+                        0.0035f *
+                        dt
+            }
+
+            /*
+             * Apply the organic field after state-specific movement.
+             * The effect is deliberately small per frame to preserve
+             * smoothness on lower-end devices.
+             */
+            particle.orbitRadius *=
+                1f +
+                    (
+                        fieldExpansion -
+                            1f
+                    ) *
+                    0.10f *
+                    dt
         }
     }
 
@@ -239,6 +392,43 @@ class OrbParticleSystem(
                     0f,
                     1f
                 )
+    }
+
+    /**
+     * Supply the organic motion envelope from OrbMotionController.
+     *
+     * Values are normalized to safe visual ranges.
+     */
+    fun setMotionEnvelope(
+        breath: Float,
+        pulse: Float,
+        fieldWarp: Float,
+        audioEnergy: Float
+    ) {
+
+        this.breath =
+            breath.coerceIn(
+                0f,
+                1f
+            )
+
+        this.pulse =
+            pulse.coerceIn(
+                0f,
+                1f
+            )
+
+        this.fieldWarp =
+            fieldWarp.coerceIn(
+                0f,
+                2f
+            )
+
+        this.audioEnergy =
+            audioEnergy.coerceIn(
+                0f,
+                1f
+            )
     }
 
     /**

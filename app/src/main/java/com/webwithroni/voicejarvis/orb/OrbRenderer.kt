@@ -231,6 +231,23 @@ class OrbRenderer(
                 deltaSeconds
             )
 
+        /*
+         * Feed the organic motion envelope into the particle field.
+         *
+         * MotionController owns the meaning of the motion.
+         * ParticleSystem owns how individual particles react.
+         */
+        particles.setMotionEnvelope(
+            breath =
+                motion.breath,
+            pulse =
+                motion.pulse,
+            fieldWarp =
+                motion.fieldWarp,
+            audioEnergy =
+                motion.audioEnergy
+        )
+
         particles.update(
             deltaSeconds =
                 deltaSeconds,
@@ -364,7 +381,9 @@ class OrbRenderer(
                 centerY,
             radius =
                 visualRadius *
-                    config.coreScale,
+                    (
+                        motion.coreScale
+                    ),
             state =
                 state,
             activity =
@@ -648,7 +667,7 @@ class OrbRenderer(
 
         val shellRadius =
             radius *
-                config.shellScale
+                motion.shellScale
 
         shellPaint.style =
             Paint.Style.FILL
@@ -754,7 +773,7 @@ class OrbRenderer(
 
         val innerRadius =
             radius *
-                config.coreScale *
+                motion.coreScale *
                 1.25f
 
         innerShellPaint.style =

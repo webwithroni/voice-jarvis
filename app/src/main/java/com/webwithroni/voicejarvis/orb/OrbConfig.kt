@@ -76,5 +76,60 @@ data class OrbConfig(
     /**
      * Reduced-motion glow intensity.
      */
-    val reducedMotionGlowScale: Float = 0.65f
+    val reducedMotionGlowScale: Float = 0.65f,
+
+    /**
+     * Depth of the organic breathing motion.
+     */
+    val breathDepth: Float = 0.035f,
+
+    /**
+     * Additional slow idle pulse layered over breathing.
+     */
+    val idlePulseDepth: Float = 0.008f,
+
+    /**
+     * Core response to voice/audio energy.
+     */
+    val coreAudioScale: Float = 0.055f,
+
+    /**
+     * Energy-shell response to voice/audio energy.
+     */
+    val shellAudioScale: Float = 0.085f,
+
+    /**
+     * Particle-field expansion caused by strong audio peaks.
+     */
+    val particleAudioScale: Float = 0.12f,
+
+    /**
+     * Neural turbulence intensity while THINKING.
+     */
+    val thinkingTurbulence: Float = 0.32f,
+
+    /**
+     * Additional thinking rotation multiplier.
+     */
+    val thinkingRotationMultiplier: Float = 1.9f,
+
+    /**
+     * Speaking expansion multiplier.
+     */
+    val speakingExpansionMultiplier: Float = 1.25f,
+
+    /**
+     * Speaking ripple propagation speed.
+     */
+    val speakingRippleSpeed: Float = 2.2f,
+
+    /**
+     * Error instability intensity.
+     */
+    val errorInstability: Float = 0.22f,
+
+    /**
+     * State transition smoothing duration.
+     */
+    val stateTransitionMs: Long = 420L
 )

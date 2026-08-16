@@ -31,11 +31,17 @@ class OrbMotionController(
      */
     data class Snapshot(
         val scale: Float,
+        val coreScale: Float,
+        val shellScale: Float,
+        val breath: Float,
+        val pulse: Float,
+        val fieldWarp: Float,
         val rotationSpeed: Float,
         val glowMultiplier: Float,
         val particleMultiplier: Float,
         val faceEnergy: Float,
         val audioAmplitude: Float,
+        val audioEnergy: Float,
         val errorProgress: Float,
         val activityIntensity: Float
     )
@@ -61,11 +67,17 @@ class OrbMotionController(
     private var snapshot =
         Snapshot(
             scale = 1f,
+            coreScale = config.coreScale,
+            shellScale = config.shellScale,
+            breath = 0f,
+            pulse = 0f,
+            fieldWarp = 0f,
             rotationSpeed = config.baseRotationSpeed,
             glowMultiplier = config.glowIntensity,
             particleMultiplier = 1f,
             faceEnergy = 0.5f,
             audioAmplitude = 0f,
+            audioEnergy = 0f,
             errorProgress = 0f,
             activityIntensity = 1f
         )
@@ -153,6 +165,13 @@ class OrbMotionController(
         snapshot =
             Snapshot(
                 scale = 1f,
+                coreScale =
+                    config.coreScale,
+                shellScale =
+                    config.shellScale,
+                breath = 0f,
+                pulse = 0f,
+                fieldWarp = 0f,
                 rotationSpeed =
                     config.baseRotationSpeed,
                 glowMultiplier =
@@ -160,6 +179,7 @@ class OrbMotionController(
                 particleMultiplier = 1f,
                 faceEnergy = 0.5f,
                 audioAmplitude = 0f,
+                audioEnergy = 0f,
                 errorProgress = 0f,
                 activityIntensity = 1f
             )
@@ -198,14 +218,91 @@ class OrbMotionController(
         val activityIntensity =
             activityIntensity()
 
+        /*
+         * Organic motion layers.
+         *
+         * The Orb always has a living baseline. State and audio
+         * modulate that baseline instead of replacing it.
+         */
+        val breath =
+            organicBreath()
+
+        val pulse =
+            organicPulse()
+
+        val audioEnergy =
+            audioEnergy()
+
         val breathing =
-            breathingScale()
+            breathingScale(
+                breath,
+                pulse,
+                audioEnergy
+            )
 
         val scale =
             if (reducedMotion) {
                 1f
             } else {
                 breathing
+            }
+
+        val coreScale =
+            if (reducedMotion) {
+                config.coreScale
+            } else {
+                config.coreScale *
+                    (
+                        1f +
+                            breath *
+                            config.breathDepth +
+                            pulse *
+                            config.idlePulseDepth +
+                            audioEnergy *
+                            config.coreAudioScale
+                    )
+            }
+
+        val shellScale =
+            if (reducedMotion) {
+                config.shellScale
+            } else {
+                config.shellScale *
+                    (
+                        1f +
+                            breath *
+                            config.breathDepth *
+                            1.35f +
+                            audioEnergy *
+                            config.shellAudioScale
+                    )
+            }
+
+        val fieldWarp =
+            if (reducedMotion) {
+                0f
+            } else {
+                when (state) {
+
+                    OrbState.THINKING ->
+                        config.thinkingTurbulence
+
+                    OrbState.SPEAKING ->
+                        audioEnergy *
+                            config.speakingExpansionMultiplier
+
+                    OrbState.HEARING ->
+                        audioEnergy *
+                            0.70f
+
+                    OrbState.ERROR ->
+                        errorPulse() *
+                            config.errorInstability
+
+                    else ->
+                        audioEnergy *
+                            config.particleAudioScale
+                }
             }
 
         val stateRotation =
@@ -240,12 +337,19 @@ class OrbMotionController(
         snapshot =
             Snapshot(
                 scale = scale,
+                coreScale = coreScale,
+                shellScale = shellScale,
+                breath = breath,
+                pulse = pulse,
+                fieldWarp = fieldWarp,
                 rotationSpeed = rotation,
                 glowMultiplier = glow,
                 particleMultiplier = particles,
                 faceEnergy = face,
                 audioAmplitude =
                     audioAmplitude,
+                audioEnergy =
+                    audioEnergy,
                 errorProgress =
                     errorProgress,
                 activityIntensity =
@@ -277,87 +381,260 @@ class OrbMotionController(
         activity
 
     /**
-     * Returns the slow breathing scale for idle/listening.
+     * Organic breathing envelope.
+     *
+     * The Orb never feels mechanically still. The base cycle is slow,
+     * smooth and asymmetric so it resembles a living system rather
+     * than a UI tween.
      */
-    private fun breathingScale():
+    private fun organicBreath():
         Float {
+
+        if (reducedMotion) {
+            return 0f
+        }
+
+        val cycleMs =
+            config.listeningBreathMs
+                .coerceAtLeast(1000L)
+
+        val cycle =
+            (
+                elapsedSeconds * 1000f /
+                    cycleMs
+                ) *
+                (2f * PI.toFloat())
+
+        val primary =
+            (
+                sin(cycle) + 1f
+            ) * 0.5f
+
+        val secondary =
+            (
+                sin(
+                    cycle * 0.5f +
+                        0.65f
+                ) + 1f
+            ) * 0.5f
+
+        /*
+         * Blend two slow oscillators.
+         * This prevents the breathing from looking like a simple
+         * one-dimensional sine-wave animation.
+         */
+        return (
+            primary * 0.78f +
+                secondary * 0.22f
+            )
+            .coerceIn(
+                0f,
+                1f
+            )
+    }
+
+    /**
+     * Very subtle inner pulse.
+     *
+     * This gives the core a persistent "alive" feeling even when
+     * the user is not speaking and Jarvis is not processing.
+     */
+    private fun organicPulse():
+        Float {
+
+        if (reducedMotion) {
+            return 0f
+        }
+
+        val pulseSpeed =
+            when (state) {
+
+                OrbState.THINKING ->
+                    1.35f
+
+                OrbState.SPEAKING ->
+                    1.10f
+
+                OrbState.HEARING ->
+                    0.95f
+
+                OrbState.ERROR ->
+                    2.40f
+
+                OrbState.PAUSED ->
+                    0.28f
+
+                OrbState.PERMISSION_REQUIRED ->
+                    0.55f
+
+                else ->
+                    0.72f
+            }
+
+        val phase =
+            elapsedSeconds *
+                pulseSpeed *
+                (2f * PI.toFloat())
+
+        val wave =
+            (
+                sin(phase) + 1f
+            ) * 0.5f
 
         return when (state) {
 
-            OrbState.LISTENING -> {
-
-                val progress =
-                    (
-                        elapsedSeconds * 1000f /
-                            config.listeningBreathMs
-                    )
-                        .coerceAtLeast(
-                            0f
-                        )
-
-                val cycle =
-                    progress *
-                        (2f * PI.toFloat())
-
-                val wave =
-                    (
-                        sin(cycle) + 1f
-                    ) * 0.5f
-
-                1f +
-                    (
-                        config.breathingScale -
-                            1f
-                        ) *
-                        wave
-            }
-
-            OrbState.HEARING -> {
-
-                1f +
-                    audioAmplitude *
-                    0.028f
-            }
-
-            OrbState.THINKING -> {
-
-                1f +
-                    (
-                        sin(
-                            elapsedSeconds *
-                                1.4f
-                        ) *
-                        0.012f
-                    )
-            }
-
-            OrbState.SPEAKING -> {
-
-                1f +
-                    audioAmplitude *
-                    0.035f
-            }
-
-            OrbState.ERROR -> {
-
-                1f +
-                    errorPulse() *
-                    0.022f
-            }
+            OrbState.ERROR ->
+                wave *
+                    errorPulse()
 
             OrbState.PAUSED ->
-                1f
+                wave *
+                    0.15f
 
-            OrbState.PERMISSION_REQUIRED -> {
-
-                1f +
-                    sin(
-                        elapsedSeconds *
-                            1.2f
-                    ) *
-                    0.004f
-            }
+            else ->
+                wave
         }
+    }
+
+    /**
+     * Convert cleaned audio amplitude into a perceptual energy envelope.
+     *
+     * Low-level background noise is suppressed, speech peaks become
+     * more expressive, and the output is intentionally non-linear.
+     */
+    private fun audioEnergy():
+        Float {
+
+        if (
+            state != OrbState.HEARING &&
+            state != OrbState.SPEAKING
+        ) {
+            return 0f
+        }
+
+        val gated =
+            (
+                audioAmplitude -
+                    config.audioNoiseGate
+                )
+                .coerceAtLeast(
+                    0f
+                )
+
+        val normalized =
+            (
+                gated /
+                    (
+                        1f -
+                            config.audioNoiseGate
+                        )
+                )
+                .coerceIn(
+                    0f,
+                    1f
+                )
+
+        /*
+         * Perceptual curve:
+         * small voice changes remain subtle,
+         * stronger speech peaks become clearly visible.
+         */
+        val curved =
+            normalized *
+                normalized *
+                (
+                    0.65f +
+                        normalized * 0.35f
+                )
+
+        return (
+            curved *
+                config.audioResponse
+            )
+            .coerceIn(
+                0f,
+                1f
+            )
+    }
+
+    /**
+     * Converts the new organic motion layers into the legacy global
+     * scale value consumed by the renderer.
+     *
+     * This keeps one source of truth for breathing while allowing
+     * the renderer to adopt the richer core/shell values gradually.
+     */
+    private fun breathingScale(
+        breath: Float,
+        pulse: Float,
+        audioEnergy: Float
+    ):
+        Float {
+
+        if (reducedMotion) {
+            return 1f
+        }
+
+        val stateMultiplier =
+            when (state) {
+
+                OrbState.LISTENING ->
+                    1.00f
+
+                OrbState.HEARING ->
+                    1.05f
+
+                OrbState.THINKING ->
+                    1.08f
+
+                OrbState.SPEAKING ->
+                    config.speakingExpansionMultiplier
+
+                OrbState.ERROR ->
+                    1.02f
+
+                OrbState.PAUSED ->
+                    0.20f
+
+                OrbState.PERMISSION_REQUIRED ->
+                    0.35f
+            }
+
+        val organic =
+            breath *
+                config.breathDepth *
+                stateMultiplier
+
+        val pulseLayer =
+            pulse *
+                config.idlePulseDepth *
+                stateMultiplier
+
+        val audioLayer =
+            audioEnergy *
+                config.coreAudioScale *
+                when (state) {
+
+                    OrbState.SPEAKING ->
+                        1.30f
+
+                    OrbState.HEARING ->
+                        0.90f
+
+                    else ->
+                        0.50f
+                }
+
+        return (
+            1f +
+                organic +
+                pulseLayer +
+                audioLayer
+            )
+            .coerceIn(
+                0.94f,
+                1.16f
+            )
     }
 
     /**
