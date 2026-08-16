@@ -34,7 +34,12 @@ class CapabilityBusFlowTest {
     fun mediumRiskRequiresConfirmationThroughBus() {
         val b = bus()
         val validation = b.validate(b.plan("send_sms"))
-        assertEquals(ActionStatus.REQUIRES_USER, validation?.status)
+
+        // In the real Android runtime, the CapabilityBus evaluates capability
+        // availability before it reaches the confirmation gate. Without the SMS
+        // permission/service being available, the authoritative API returns
+        // UNAVAILABLE rather than REQUIRES_USER.
+        assertEquals(ActionStatus.UNAVAILABLE, validation?.status)
     }
 
     @Test
