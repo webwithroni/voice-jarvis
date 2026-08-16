@@ -43,6 +43,7 @@ class OrbMotionController(
         val audioAmplitude: Float,
         val audioEnergy: Float,
         val errorProgress: Float,
+        val stateTransition: Float,
         val activityIntensity: Float
     )
 
@@ -64,6 +65,9 @@ class OrbMotionController(
     private var errorElapsedSeconds =
         0f
 
+    private var stateTransitionElapsedSeconds =
+        0f
+
     private var snapshot =
         Snapshot(
             scale = 1f,
@@ -79,6 +83,7 @@ class OrbMotionController(
             audioAmplitude = 0f,
             audioEnergy = 0f,
             errorProgress = 0f,
+            stateTransition = 1f,
             activityIntensity = 1f
         )
 
@@ -95,6 +100,9 @@ class OrbMotionController(
 
         state =
             value
+
+        stateTransitionElapsedSeconds =
+            0f
 
         if (
             state ==
@@ -162,6 +170,9 @@ class OrbMotionController(
         errorElapsedSeconds =
             0f
 
+        stateTransitionElapsedSeconds =
+            0f
+
         snapshot =
             Snapshot(
                 scale = 1f,
@@ -181,6 +192,7 @@ class OrbMotionController(
                 audioAmplitude = 0f,
                 audioEnergy = 0f,
                 errorProgress = 0f,
+                stateTransition = 1f,
                 activityIntensity = 1f
             )
     }
@@ -200,6 +212,9 @@ class OrbMotionController(
                 )
 
         elapsedSeconds +=
+            dt
+
+        stateTransitionElapsedSeconds +=
             dt
 
         if (
@@ -334,6 +349,19 @@ class OrbMotionController(
         val errorProgress =
             errorProgress()
 
+        val stateTransition =
+            stateTransitionProgress()
+
+        /*
+         * Use transition progress as a soft entry envelope for
+         * state-specific intensity. The Orb stays alive; only the
+         * new state's stronger behavior ramps in.
+         */
+        val transitionIntensity =
+            transitionIntensity(
+                stateTransition
+            )
+
         snapshot =
             Snapshot(
                 scale = scale,
@@ -341,17 +369,45 @@ class OrbMotionController(
                 shellScale = shellScale,
                 breath = breath,
                 pulse = pulse,
-                fieldWarp = fieldWarp,
-                rotationSpeed = rotation,
-                glowMultiplier = glow,
-                particleMultiplier = particles,
+                fieldWarp =
+                    fieldWarp *
+                    transitionIntensity,
+                rotationSpeed =
+                    rotation *
+                    (
+                        0.72f +
+                            transitionIntensity *
+                            0.28f
+                        ),
+                glowMultiplier =
+                    glow *
+                    (
+                        0.88f +
+                            transitionIntensity *
+                            0.12f
+                        ),
+                particleMultiplier =
+                    particles *
+                    (
+                        0.90f +
+                            transitionIntensity *
+                            0.10f
+                        ),
                 faceEnergy = face,
                 audioAmplitude =
                     audioAmplitude,
                 audioEnergy =
-                    audioEnergy,
+                    audioEnergy *
+                    (
+                        0.82f +
+                            transitionIntensity *
+                            0.18f
+                        ),
                 errorProgress =
-                    errorProgress,
+                    errorProgress *
+                    transitionIntensity,
+                stateTransition =
+                    stateTransition,
                 activityIntensity =
                     activityIntensity
             )
@@ -874,6 +930,76 @@ class OrbMotionController(
             base *
                 intensity +
                 audioBoost
+            )
+            .coerceIn(
+                0f,
+                1f
+            )
+    }
+
+    /**
+     * Soft activation envelope for the newly entered state.
+     *
+     * Keeps the Orb alive during transitions instead of fading
+     * the entire visual system to zero.
+     */
+    private fun transitionIntensity(
+        progress: Float
+    ):
+        Float {
+
+        return (
+            0.20f +
+                progress.coerceIn(
+                    0f,
+                    1f
+                ) *
+                0.80f
+            )
+            .coerceIn(
+                0.20f,
+                1f
+            )
+    }
+
+    /**
+     * Smooth state transition progress.
+     *
+     * 0 -> 1 over stateTransitionMs using a smoothstep-style
+     * easing curve so the Orb never snaps between personalities.
+     */
+    private fun stateTransitionProgress():
+        Float {
+
+        if (
+            config.stateTransitionMs <=
+                0L
+        ) {
+            return 1f
+        }
+
+        val linear =
+            (
+                stateTransitionElapsedSeconds * 1000f /
+                    config.stateTransitionMs
+                )
+                .coerceIn(
+                    0f,
+                    1f
+                )
+
+        /*
+         * Smoothstep:
+         * 3t² - 2t³
+         *
+         * Starts and ends gently.
+         */
+        return (
+            linear * linear *
+                (
+                    3f -
+                        2f * linear
+                    )
             )
             .coerceIn(
                 0f,

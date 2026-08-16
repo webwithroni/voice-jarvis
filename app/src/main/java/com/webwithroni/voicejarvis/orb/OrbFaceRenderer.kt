@@ -66,11 +66,36 @@ class OrbFaceRenderer {
         state: OrbState,
         activity: OrbActivity,
         amplitude: Float,
-        timeSeconds: Float
+        timeSeconds: Float,
+        breath: Float = 0f,
+        pulse: Float = 0f,
+        audioEnergy: Float = 0f,
+        fieldWarp: Float = 0f
     ) {
 
         val safeAmplitude =
             amplitude
+                .coerceIn(
+                    0f,
+                    1f
+                )
+
+        /*
+         * Unified neural energy signal.
+         *
+         * Breath keeps the face alive at rest.
+         * Pulse adds subtle internal rhythm.
+         * Audio makes speech/hearing expressive.
+         * Field warp makes thinking feel more computational.
+         */
+        val neuralEnergy =
+            (
+                breath * 0.25f +
+                    pulse * 0.15f +
+                    audioEnergy * 0.45f +
+                    fieldWarp * 0.15f +
+                    safeAmplitude * 0.20f
+                )
                 .coerceIn(
                     0f,
                     1f
@@ -136,7 +161,11 @@ class OrbFaceRenderer {
             state = state,
             activity = activity,
             timeSeconds = timeSeconds,
-            color = stateColor
+            color = stateColor,
+            breath = breath,
+            pulse = pulse,
+            audioEnergy = audioEnergy,
+            fieldWarp = fieldWarp
         )
 
         /*
@@ -154,10 +183,17 @@ class OrbFaceRenderer {
             radius * 0.34f
 
         val eyeEnergy =
-            eyeEnergy(
-                state,
-                safeAmplitude
-            )
+            (
+                eyeEnergy(
+                    state,
+                    safeAmplitude
+                ) +
+                    neuralEnergy * 0.34f
+                )
+                .coerceIn(
+                    0f,
+                    1f
+                )
 
         drawEye(
             canvas,
@@ -208,22 +244,42 @@ class OrbFaceRenderer {
             highlightPaint.color =
                 OrbColors.WHITE
 
+            val highlightEnergy =
+                (
+                    neuralEnergy * 0.70f +
+                        safeAmplitude * 0.30f
+                    )
+                    .coerceIn(
+                        0f,
+                        1f
+                    )
+
             highlightPaint.alpha =
                 (
-                    24 +
-                        safeAmplitude * 55f
-                )
+                    20f +
+                        highlightEnergy * 75f
+                    )
                     .toInt()
                     .coerceIn(
                         0,
                         255
                     )
 
+            val highlightScale =
+                1f +
+                    (
+                        breath * 0.10f +
+                            pulse * 0.08f +
+                            audioEnergy * 0.14f
+                        )
+
             canvas.drawCircle(
                 centerX,
                 centerY -
                     radius * 0.46f,
-                radius * 0.025f,
+                radius *
+                    0.025f *
+                    highlightScale,
                 highlightPaint
             )
         }
@@ -519,7 +575,11 @@ class OrbFaceRenderer {
         state: OrbState,
         activity: OrbActivity,
         timeSeconds: Float,
-        color: Int
+        color: Int,
+        breath: Float,
+        pulse: Float,
+        audioEnergy: Float,
+        fieldWarp: Float
     ) {
 
         if (
@@ -560,52 +620,104 @@ class OrbFaceRenderer {
                     1f
             }
 
+        val neuralMotion =
+            (
+                breath * 0.35f +
+                    pulse * 0.20f +
+                    audioEnergy * 0.30f +
+                    fieldWarp * 0.45f
+                )
+                .coerceIn(
+                    0f,
+                    1.5f
+                )
+
         neuralPaint.alpha =
             when (state) {
 
                 OrbState.THINKING ->
                     (
-                        75f *
-                            activityBoost
+                        70f *
+                            activityBoost *
+                            (
+                                1f +
+                                    neuralMotion *
+                                    0.75f
+                                )
                         )
                             .toInt()
                             .coerceIn(
                                 0,
-                                150
+                                175
                             )
 
                 OrbState.SPEAKING ->
-                    55
+                    (
+                        45f +
+                            audioEnergy * 70f +
+                            neuralMotion * 20f
+                        )
+                            .toInt()
+                            .coerceIn(
+                                20,
+                                155
+                            )
 
                 OrbState.HEARING ->
-                    45
+                    (
+                        38f +
+                            audioEnergy * 48f +
+                            breath * 12f
+                        )
+                            .toInt()
+                            .coerceIn(
+                                18,
+                                120
+                            )
 
                 else ->
-                    28
+                    (
+                        24f +
+                            breath * 12f +
+                            pulse * 8f
+                        )
+                            .toInt()
+                            .coerceIn(
+                                12,
+                                70
+                            )
             }
 
         val arcRadius =
             radius *
                 0.40f
 
-        val pulse =
+        val arcPulse =
             (
                 1f +
                     sin(
                         timeSeconds *
-                            1.8f
+                            (
+                                1.8f +
+                                    fieldWarp * 1.20f +
+                                    audioEnergy * 0.80f
+                                )
                     ) *
-                    0.08f
+                    (
+                        0.05f +
+                            breath * 0.05f +
+                            audioEnergy * 0.08f
+                        )
                 )
 
         val left =
             RectF(
                 centerX -
-                    arcRadius * pulse,
+                    arcRadius * arcPulse,
                 centerY -
                     arcRadius,
                 centerX +
-                    arcRadius * pulse,
+                    arcRadius * arcPulse,
                 centerY +
                     arcRadius
             )
@@ -647,10 +759,20 @@ class OrbFaceRenderer {
         val drift =
             sin(
                 timeSeconds *
-                    2.2f
+                    (
+                        2.2f +
+                            fieldWarp * 1.60f +
+                            audioEnergy * 0.90f
+                        )
             ) *
                 radius *
-                0.018f
+                (
+                    0.012f +
+                        breath * 0.010f +
+                        pulse * 0.006f +
+                        audioEnergy * 0.016f +
+                        fieldWarp * 0.010f
+                    )
 
         canvas.drawLine(
             spineX + drift,
