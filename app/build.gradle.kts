@@ -68,6 +68,16 @@ android {
         viewBinding = true
         buildConfig = true
     }
+
+    /*
+     * P0: JVM unit tests (incl. Robolectric) run without a device.
+     */
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 /*
@@ -97,4 +107,11 @@ dependencies {
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-perf")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
+
+    // P0 — JVM unit test infrastructure (no device required)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation("io.mockk:mockk:1.13.13")
 }

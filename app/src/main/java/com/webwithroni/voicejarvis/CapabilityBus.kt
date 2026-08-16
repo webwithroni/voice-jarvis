@@ -195,6 +195,19 @@ class CapabilityBus(
      *
      * No AccessibilityNodeInfo reference escapes this method.
      */
+    /**
+     * P0: deterministic availability query for the tool bridge / diagnostics.
+     *
+     * Delegates to the authoritative CapabilityManager truth-up layer so a
+     * capability is never advertised as usable unless it is actually AVAILABLE.
+     */
+    fun availability(
+        action: String
+    ): CapabilityAvailability {
+
+        return capabilityManager.availabilityForAction(action)
+    }
+
     private fun captureFingerprint(): String? {
 
         val service =
