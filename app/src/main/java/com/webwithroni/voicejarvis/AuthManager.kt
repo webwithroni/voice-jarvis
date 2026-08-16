@@ -120,16 +120,31 @@ object AuthManager {
         return try {
 
             val idToken =
-                requestGoogleIdToken(
-                    activity = activity,
-                    filterByAuthorizedAccounts = true
-                ).recoverCatching {
+                try {
+                    requestGoogleIdToken(
+                        activity = activity,
+                        filterByAuthorizedAccounts = true
+                    )
+                } catch (
+                    firstAttempt: Throwable
+                ) {
+                    /*
+                     * No previously-authorized account was available.
+                     * Retry with all available Google accounts.
+                     *
+                     * Cancellation must never be swallowed.
+                     */
+                    if (
+                        firstAttempt is CancellationException
+                    ) {
+                        throw firstAttempt
+                    }
 
                     requestGoogleIdToken(
                         activity = activity,
                         filterByAuthorizedAccounts = false
                     )
-                }.getOrThrow()
+                }
 
             val googleCredential =
                 GoogleAuthProvider.getCredential(

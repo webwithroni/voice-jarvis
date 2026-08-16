@@ -39,7 +39,11 @@ class AuthActivity : AppCompatActivity() {
             AuthManager.isSignedIn() &&
             !AuthManager.isAnonymous()
         ) {
-            openHome()
+            AuthManager.initialize(
+                this
+            )
+
+            openPostAuthDestination()
             return
         }
 
