@@ -34,6 +34,7 @@ class JarvisScreensActivity : AppCompatActivity() {
         const val HISTORY = "history"
         const val DETAIL = "detail"
         const val SETTINGS = "settings"
+        const val VOICE = "voice"
         const val ONBOARDING = "onboarding"
         const val MICROPHONE = "microphone"
         const val CALL = "call"
@@ -103,6 +104,9 @@ class JarvisScreensActivity : AppCompatActivity() {
 
             SETTINGS ->
                 showSettings()
+
+            VOICE ->
+                showVoice()
 
             ONBOARDING ->
                 showOnboarding()
@@ -1436,13 +1440,20 @@ class JarvisScreensActivity : AppCompatActivity() {
             )
         )
 
+        val selectedVoice =
+            VoicePreferences.getSelectedVoiceInfo(
+                this
+            )
+
         body.addView(
             actionRow(
                 R.drawable.ic_mic,
                 "Voice",
-                "Aoede • Gemini Live • Real-time",
+                "${selectedVoice.name} • ${selectedVoice.character} • Gemini Live",
                 cyan
-            ),
+            ) {
+                openRoute(VOICE)
+            },
             lp(
                 bottom = 10
             )
@@ -1680,6 +1691,579 @@ class JarvisScreensActivity : AppCompatActivity() {
             },
             lp()
         )
+
+        setContentView(
+            page
+        )
+    }
+
+
+    private fun showVoice() {
+
+        val page =
+            root()
+
+        val body =
+            content(page)
+
+        body.addView(
+            header(
+                "Voice",
+                "Choose how Jarvis sounds."
+            ),
+            lp(
+                bottom = 16
+            )
+        )
+
+        var selectedVoiceId =
+            VoicePreferences.getSelectedVoice(
+                this
+            )
+
+        val currentVoice =
+            VoiceCatalog.find(
+                selectedVoiceId
+            )
+
+        val currentCard =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+
+                setPadding(
+                    dp(16),
+                    dp(16),
+                    dp(16),
+                    dp(16)
+                )
+
+                background =
+                    surfaceBackground(
+                        elevated,
+                        22f,
+                        cyan
+                    )
+            }
+
+        currentCard.addView(
+            TextView(this).apply {
+
+                text =
+                    "CURRENT VOICE"
+
+                textSize =
+                    11f
+
+                typeface =
+                    Typeface.DEFAULT_BOLD
+
+                letterSpacing =
+                    0.12f
+
+                setTextColor(
+                    cyan
+                )
+            },
+            lp(
+                bottom = 6
+            )
+        )
+
+        currentCard.addView(
+            TextView(this).apply {
+
+                text =
+                    currentVoice.name
+
+                textSize =
+                    22f
+
+                typeface =
+                    Typeface.DEFAULT_BOLD
+
+                setTextColor(
+                    white
+                )
+            },
+            lp()
+        )
+
+        currentCard.addView(
+            TextView(this).apply {
+
+                text =
+                    "${currentVoice.character} • Gemini Live"
+
+                textSize =
+                    13f
+
+                setTextColor(
+                    secondary
+                )
+
+                setPadding(
+                    0,
+                    dp(5),
+                    0,
+                    0
+                )
+            },
+            lp()
+        )
+
+        body.addView(
+            currentCard,
+            lp(
+                bottom = 18
+            )
+        )
+
+        body.addView(
+            sectionTitle(
+                "GEMINI LIVE VOICES",
+                cyan
+            ),
+            lp()
+        )
+
+        val searchContainer =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.HORIZONTAL
+
+                gravity =
+                    Gravity.CENTER_VERTICAL
+
+                background =
+                    surfaceBackground(
+                        surface,
+                        18f,
+                        border
+                    )
+
+                setPadding(
+                    dp(12),
+                    0,
+                    dp(12),
+                    0
+                )
+            }
+
+        searchContainer.addView(
+            ImageView(this).apply {
+
+                setImageResource(
+                    R.drawable.ic_search
+                )
+
+                contentDescription =
+                    "Search voices"
+            },
+            LinearLayout.LayoutParams(
+                dp(24),
+                dp(24)
+            )
+        )
+
+        val search =
+            EditText(this).apply {
+
+                hint =
+                    "Search voices"
+
+                textSize =
+                    15f
+
+                setTextColor(
+                    white
+                )
+
+                setHintTextColor(
+                    tertiary
+                )
+
+                setSingleLine(true)
+
+                background =
+                    null
+
+                layoutParams =
+                    LinearLayout.LayoutParams(
+                        0,
+                        dp(54),
+                        1f
+                    ).apply {
+                        leftMargin =
+                            dp(8)
+                    }
+            }
+
+        searchContainer.addView(
+            search
+        )
+
+        body.addView(
+            searchContainer,
+            lp(
+                bottom = 14
+            )
+        )
+
+        val voiceList =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+            }
+
+        body.addView(
+            voiceList,
+            lp(
+                bottom = 18
+            )
+        )
+
+        fun renderVoices(
+            query: String = ""
+        ) {
+
+            voiceList.removeAllViews()
+
+            val normalizedQuery =
+                query.trim().lowercase()
+
+            val voices =
+                VoiceCatalog.all.filter { voice ->
+
+                    normalizedQuery.isBlank() ||
+                        voice.name
+                            .lowercase()
+                            .contains(
+                                normalizedQuery
+                            ) ||
+                        voice.character
+                            .lowercase()
+                            .contains(
+                                normalizedQuery
+                            )
+                }
+
+            if (voices.isEmpty()) {
+
+                voiceList.addView(
+                    emptyState(
+                        R.drawable.ic_mic,
+                        "NO VOICES FOUND",
+                        "Try another voice name or character.",
+                        violet
+                    ),
+                    lp(
+                        bottom = 10
+                    )
+                )
+
+                return
+            }
+
+            voices.forEach { voice ->
+
+                val card =
+                    LinearLayout(this).apply {
+
+                        orientation =
+                            LinearLayout.HORIZONTAL
+
+                        gravity =
+                            Gravity.CENTER_VERTICAL
+
+                        setPadding(
+                            dp(12),
+                            dp(10),
+                            dp(12),
+                            dp(10)
+                        )
+
+                        background =
+                            surfaceBackground(
+                                if (
+                                    voice.id.equals(
+                                        selectedVoiceId,
+                                        ignoreCase = true
+                                    )
+                                ) {
+                                    elevated
+                                } else {
+                                    surface
+                                },
+                                18f,
+                                if (
+                                    voice.id.equals(
+                                        selectedVoiceId,
+                                        ignoreCase = true
+                                    )
+                                ) {
+                                    cyan
+                                } else {
+                                    border
+                                }
+                            )
+
+                        isClickable =
+                            true
+
+                        isFocusable =
+                            true
+                    }
+
+                val radio =
+                    RadioButton(this@JarvisScreensActivity).apply {
+
+                        isChecked =
+                            voice.id.equals(
+                                selectedVoiceId,
+                                ignoreCase = true
+                            )
+
+                        contentDescription =
+                            "Select ${voice.name}"
+
+                        setOnClickListener {
+
+                            selectedVoiceId =
+                                voice.id
+
+                            renderVoices(
+                                search.text?.toString()
+                                    ?: ""
+                            )
+                        }
+                    }
+
+                card.addView(
+                    radio,
+                    LinearLayout.LayoutParams(
+                        dp(48),
+                        dp(52)
+                    )
+                )
+
+                val copy =
+                    LinearLayout(this).apply {
+
+                        orientation =
+                            LinearLayout.VERTICAL
+
+                        layoutParams =
+                            LinearLayout.LayoutParams(
+                                0,
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                1f
+                            ).apply {
+                                leftMargin =
+                                    dp(6)
+                            }
+
+                        addView(
+                            TextView(
+                                this@JarvisScreensActivity
+                            ).apply {
+
+                                text =
+                                    voice.name
+
+                                textSize =
+                                    15f
+
+                                typeface =
+                                    Typeface.DEFAULT_BOLD
+
+                                setTextColor(
+                                    white
+                                )
+                            },
+                            lp()
+                        )
+
+                        addView(
+                            TextView(
+                                this@JarvisScreensActivity
+                            ).apply {
+
+                                text =
+                                    voice.character
+
+                                textSize =
+                                    13f
+
+                                setTextColor(
+                                    if (
+                                        voice.id.equals(
+                                            selectedVoiceId,
+                                            ignoreCase = true
+                                        )
+                                    ) {
+                                        cyan
+                                    } else {
+                                        secondary
+                                    }
+                                )
+
+                                setPadding(
+                                    0,
+                                    dp(4),
+                                    0,
+                                    0
+                                )
+                            },
+                            lp()
+                        )
+                    }
+
+                card.addView(
+                    copy
+                )
+
+                card.setOnClickListener {
+
+                    selectedVoiceId =
+                        voice.id
+
+                    renderVoices(
+                        search.text?.toString()
+                            ?: ""
+                    )
+                }
+
+                voiceList.addView(
+                    card,
+                    lp(
+                        bottom = 8
+                    )
+                )
+            }
+        }
+
+        search.addTextChangedListener(
+            object : TextWatcher {
+
+                override fun beforeTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    count: Int,
+                    after: Int
+                ) = Unit
+
+                override fun onTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    before: Int,
+                    count: Int
+                ) {
+                    renderVoices(
+                        s?.toString() ?: ""
+                    )
+                }
+
+                override fun afterTextChanged(
+                    s: Editable?
+                ) = Unit
+            }
+        )
+
+        body.addView(
+            primaryButton(
+                "SAVE VOICE",
+                {
+
+                    val saved =
+                        VoicePreferences.setSelectedVoice(
+                            this,
+                            selectedVoiceId
+                        )
+
+                    if (!saved) {
+
+                        Toast.makeText(
+                            this,
+                            "Unable to save selected voice.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        return@primaryButton
+                    }
+
+                    Toast.makeText(
+                        this,
+                        "${VoiceCatalog.find(selectedVoiceId).name} selected.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    finish()
+                },
+                cyan
+            ),
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            secondaryButton(
+                "RESET TO AOEDE"
+            ) {
+
+                selectedVoiceId =
+                    VoiceCatalog.DEFAULT_VOICE
+
+                VoicePreferences.resetToDefault(
+                    this
+                )
+
+                Toast.makeText(
+                    this,
+                    "Voice reset to Aoede.",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                renderVoices(
+                    search.text?.toString() ?: ""
+                )
+            },
+            lp(
+                bottom = 10
+            )
+        )
+
+        body.addView(
+            TextView(this).apply {
+
+                text =
+                    "Changing the voice applies to the next Gemini Live session."
+
+                textSize =
+                    12f
+
+                setTextColor(
+                    tertiary
+                )
+
+                gravity =
+                    Gravity.CENTER
+
+                setPadding(
+                    dp(6),
+                    dp(8),
+                    dp(6),
+                    dp(18)
+                )
+            },
+            lp()
+        )
+
+        renderVoices()
 
         setContentView(
             page
