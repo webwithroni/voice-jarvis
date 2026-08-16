@@ -722,6 +722,11 @@ class JarvisService : Service() {
                 systemPrompt =
                     buildPrimarySystemPrompt(),
 
+                voiceName =
+                    VoicePreferences.getSelectedVoice(
+                        this@JarvisService
+                    ),
+
                 onSetupComplete = {
 
                     handler.post {
