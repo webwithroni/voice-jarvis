@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.webwithroni.voicejarvis"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.webwithroni.voicejarvis"
