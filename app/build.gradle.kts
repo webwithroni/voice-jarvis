@@ -48,9 +48,48 @@ android {
         )
     }
 
+    signingConfigs {
+        if (
+            System.getenv("CI") == "true" &&
+            System.getenv("VOICE_JARVIS_CI_KEYSTORE_PATH") != null
+        ) {
+            create("ciDebug") {
+                storeFile =
+                    file(
+                        System.getenv(
+                            "VOICE_JARVIS_CI_KEYSTORE_PATH"
+                        )
+                    )
+
+                storePassword =
+                    System.getenv(
+                        "VOICE_JARVIS_CI_STORE_PASSWORD"
+                    )
+
+                keyAlias =
+                    "voice-jarvis-ci"
+
+                keyPassword =
+                    System.getenv(
+                        "VOICE_JARVIS_CI_STORE_PASSWORD"
+                    )
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
+
+            if (
+                System.getenv("CI") == "true" &&
+                System.getenv("VOICE_JARVIS_CI_KEYSTORE_PATH") != null
+            ) {
+                signingConfig =
+                    signingConfigs.getByName(
+                        "ciDebug"
+                    )
+            }
         }
 
         release {
