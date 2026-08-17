@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "218806291908-5etpoeaabhdp89kbahmng4gtjr5nhg06.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.webwithroni.voicejarvis",
+            "certificate_hash": "143aa3cf6b4e7dfb34e4c705f82f9408872a59a5"
+          }
+        },
+        {
           "client_id": "218806291908-8me2fefeent49pr6jt6jkbj349v43f6m.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
