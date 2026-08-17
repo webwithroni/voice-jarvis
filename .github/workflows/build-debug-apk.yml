@@ -27,6 +27,29 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug -PGROQ_API_KEY=${{ secrets.GROQ_API_KEY }} -PGEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} -PTAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }} -POPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }} -PDEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
 
+      - name: Inspect APK signing certificate
+        shell: bash
+        run: |
+          echo "===== APK SIGNING CERTIFICATE ====="
+
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+
+          if [ ! -x "$APKSIGNER" ]; then
+            APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          fi
+
+          if [ -z "$APKSIGNER" ] || [ ! -x "$APKSIGNER" ]; then
+            echo "ERROR: apksigner was not found."
+            find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner -print || true
+            exit 1
+          fi
+
+          echo "Using: $APKSIGNER"
+
+          "$APKSIGNER" verify             --verbose             --print-certs             app/build/outputs/apk/debug/app-debug.apk
+
+          echo "===== END APK SIGNING CERTIFICATE ====="
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
