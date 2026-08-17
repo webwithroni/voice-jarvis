@@ -120,51 +120,17 @@ object AuthManager {
 
         return try {
 
+            /*
+             * This screen has an explicit "Continue with Google" button.
+             *
+             * Use Google's dedicated Sign-in-with-Google Credential Manager
+             * flow directly. This flow is specifically intended for cases
+             * where an existing Google account requires reauthentication.
+             */
             val idToken =
-                try {
-                    requestGoogleIdToken(
-                        activity = activity,
-                        filterByAuthorizedAccounts = true
-                    )
-                } catch (
-                    firstAttempt: Throwable
-                ) {
-                    /*
-                     * No previously-authorized account was available.
-                     * Retry with all Google accounts available to the
-                     * Credential Manager provider.
-                     */
-                    if (
-                        firstAttempt is CancellationException
-                    ) {
-                        throw firstAttempt
-                    }
-
-                    try {
-                        requestGoogleIdToken(
-                            activity = activity,
-                            filterByAuthorizedAccounts = false
-                        )
-                    } catch (
-                        secondAttempt: Throwable
-                    ) {
-                        /*
-                         * The visible UI is an explicit "Continue with
-                         * Google" button. Google provides a dedicated
-                         * Sign-in-with-Google Credential Manager option
-                         * for exactly this situation.
-                         */
-                        if (
-                            secondAttempt is CancellationException
-                        ) {
-                            throw secondAttempt
-                        }
-
-                        requestExplicitGoogleIdToken(
-                            activity
-                        )
-                    }
-                }
+                requestExplicitGoogleIdToken(
+                    activity
+                )
 
             val googleCredential =
                 GoogleAuthProvider.getCredential(
@@ -195,14 +161,14 @@ object AuthManager {
 
                 } catch (
                     collision:
-                        com.google.firebase.auth.FirebaseAuthUserCollisionException
+                    com.google.firebase.auth.FirebaseAuthUserCollisionException
                 ) {
 
                     /*
                      * The Google account already has a Firebase identity.
                      *
-                     * Do not silently invent another account.
-                     * Sign in to the established Google identity.
+                     * Sign in to that existing Firebase identity instead
+                     * of creating a second account.
                      */
                     val signedIn =
                         auth
