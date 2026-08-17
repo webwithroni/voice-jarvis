@@ -11,8 +11,6 @@
     android:paddingTop="24dp"
     android:paddingBottom="20dp">
 
-    <!-- TOP BRAND -->
-
     <LinearLayout
         android:id="@+id/authBrand"
         android:layout_width="wrap_content"
@@ -40,8 +38,6 @@
             android:letterSpacing="0.18" />
 
     </LinearLayout>
-
-    <!-- PRODUCT POSITIONING -->
 
     <TextView
         android:id="@+id/authEyebrow"
@@ -78,13 +74,11 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:gravity="center"
-        android:text="A personal autonomous voice system built around you."
+        android:text="Sign in once. Keep your JARVIS workspace synced."
         android:lineSpacingExtra="3dp"
         app:layout_constraintTop_toBottomOf="@id/authTitle"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- NEURAL ORB -->
 
     <FrameLayout
         android:id="@+id/authOrbStage"
@@ -111,14 +105,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal|bottom"
-            android:layout_marginBottom="18dp"
+            android:layout_marginBottom="14dp"
             android:text="NEURAL CORE"
             android:textColor="@color/vj_text_tertiary"
             android:letterSpacing="0.16" />
 
     </FrameLayout>
-
-    <!-- AUTH ACTION -->
 
     <LinearLayout
         android:id="@+id/authActionArea"
@@ -130,23 +122,136 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/phoneNumberLayout"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Phone number"
+            app:boxStrokeColor="@color/vj_cyan"
+            app:hintTextColor="@color/vj_text_secondary">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/phoneNumberInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="phone"
+                android:maxLines="1"
+                android:singleLine="true"
+                android:hint="+91 98765 43210" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
         <Button
-            android:id="@+id/googleSignInButton"
+            android:id="@+id/sendOtpButton"
             style="@style/VJButton"
             android:layout_width="match_parent"
             android:layout_height="@dimen/vj_button_height"
+            android:layout_marginTop="10dp"
             android:background="@drawable/vj_button_primary"
-            android:text="Continue with Google"
+            android:text="Continue with Phone"
             android:textColor="@color/vj_bg_canvas"
             android:textSize="15sp"
             android:textStyle="bold"
             android:textAllCaps="false" />
 
+        <LinearLayout
+            android:id="@+id/otpSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/otpPrompt"
+                style="@style/VJTextCaption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:text="Enter the 6-digit code sent to your phone."
+                android:textColor="@color/vj_text_tertiary" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/otpInputLayout"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="Verification code"
+                app:boxStrokeColor="@color/vj_cyan"
+                app:hintTextColor="@color/vj_text_secondary">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/otpInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:maxLength="6"
+                    android:maxLines="1"
+                    android:gravity="center"
+                    android:letterSpacing="0.18"
+                    android:textSize="20sp"
+                    android:singleLine="true" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <Button
+                android:id="@+id/verifyOtpButton"
+                style="@style/VJButton"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vj_button_height"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/vj_button_primary"
+                android:text="Verify & Continue"
+                android:textColor="@color/vj_bg_canvas"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textAllCaps="false" />
+
+            <TextView
+                android:id="@+id/resendOtpButton"
+                style="@style/VJTextCaption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:text="Resend code in 60s"
+                android:textColor="@color/vj_cyan"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/authOrText"
+            style="@style/VJTextCaption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="OR"
+            android:textColor="@color/vj_text_disabled"
+            android:letterSpacing="0.12" />
+
+        <Button
+            android:id="@+id/googleSignInButton"
+            style="@style/VJButton"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/vj_button_height"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/vj_button_secondary"
+            android:text="Continue with Google"
+            android:textColor="@color/vj_text_primary"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textAllCaps="false" />
+
         <ProgressBar
-            android:id="@+id/googleSignInProgress"
+            android:id="@+id/authProgress"
             android:layout_width="28dp"
             android:layout_height="28dp"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="10dp"
             android:visibility="gone" />
 
         <TextView
@@ -154,9 +259,9 @@
             style="@style/VJTextCaption"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:gravity="center"
-            android:text="Secure sign-in with your Google account."
+            android:text="Secure authentication powered by Firebase."
             android:textColor="@color/vj_text_tertiary" />
 
         <TextView
@@ -164,9 +269,9 @@
             style="@style/VJTextCaption"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="6dp"
             android:gravity="center"
-            android:text="Your account keeps your conversations and preferences synced."
+            android:text="Your conversations and preferences stay connected to your account."
             android:textColor="@color/vj_text_tertiary" />
 
         <TextView
@@ -174,7 +279,7 @@
             style="@style/VJTextCaption"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="8dp"
             android:gravity="center"
             android:text="Privacy  •  Terms"
             android:textColor="@color/vj_text_disabled" />

@@ -10,8 +10,12 @@ import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import com.google.android.gms.tasks.Task
@@ -20,6 +24,7 @@ import kotlin.coroutines.resumeWithException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import android.util.Base64
+import java.util.concurrent.TimeUnit
 
 /**
  * Central authentication gateway for Voice Jarvis.
@@ -102,6 +107,301 @@ object AuthManager {
         return auth.currentUser
             ?.isAnonymous
             ?: false
+    }
+
+    interface PhoneVerificationCallbacks {
+
+        fun onVerificationCompleted(
+            credential: PhoneAuthCredential
+        )
+
+        fun onCodeSent(
+            verificationId: String,
+            resendToken: PhoneAuthProvider.ForceResendingToken
+        )
+
+        fun onVerificationFailed(
+            error: FirebaseException
+        )
+
+        fun onCodeAutoRetrievalTimeOut(
+            verificationId: String
+        ) {
+        }
+    }
+
+    /**
+     * Start Firebase Phone OTP verification.
+     *
+     * Firebase owns the SMS verification and app-verification flow.
+     * The Android Activity receives verification callbacks through the
+     * callback interface above.
+     */
+    fun startPhoneVerification(
+        activity: Activity,
+        phoneNumber: String,
+        callbacks: PhoneVerificationCallbacks
+    ) {
+
+        startPhoneVerificationInternal(
+            activity = activity,
+            phoneNumber = phoneNumber,
+            callbacks = callbacks,
+            forceResendingToken = null
+        )
+    }
+
+    /**
+     * Resend the OTP using Firebase's resending token.
+     */
+    fun resendPhoneVerification(
+        activity: Activity,
+        phoneNumber: String,
+        resendToken: PhoneAuthProvider.ForceResendingToken,
+        callbacks: PhoneVerificationCallbacks
+    ) {
+
+        startPhoneVerificationInternal(
+            activity = activity,
+            phoneNumber = phoneNumber,
+            callbacks = callbacks,
+            forceResendingToken = resendToken
+        )
+    }
+
+    private fun startPhoneVerificationInternal(
+        activity: Activity,
+        phoneNumber: String,
+        callbacks: PhoneVerificationCallbacks,
+        forceResendingToken:
+            PhoneAuthProvider.ForceResendingToken?
+    ) {
+
+        val authCallbacks =
+            object :
+                PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+
+                override fun onVerificationCompleted(
+                    credential: PhoneAuthCredential
+                ) {
+                    callbacks.onVerificationCompleted(
+                        credential
+                    )
+                }
+
+                override fun onVerificationFailed(
+                    error: FirebaseException
+                ) {
+                    callbacks.onVerificationFailed(
+                        error
+                    )
+                }
+
+                override fun onCodeSent(
+                    verificationId: String,
+                    token:
+                        PhoneAuthProvider.ForceResendingToken
+                ) {
+                    callbacks.onCodeSent(
+                        verificationId,
+                        token
+                    )
+                }
+
+                override fun onCodeAutoRetrievalTimeOut(
+                    verificationId: String
+                ) {
+                    callbacks.onCodeAutoRetrievalTimeOut(
+                        verificationId
+                    )
+                }
+            }
+
+        try {
+
+            val builder =
+                PhoneAuthOptions
+                    .newBuilder(
+                        auth
+                    )
+                    .setPhoneNumber(
+                        phoneNumber
+                    )
+                    .setTimeout(
+                        60L,
+                        TimeUnit.SECONDS
+                    )
+                    .setActivity(
+                        activity
+                    )
+                    .setCallbacks(
+                        authCallbacks
+                    )
+
+            forceResendingToken?.let {
+                builder.setForceResendingToken(
+                    it
+                )
+            }
+
+            PhoneAuthProvider.verifyPhoneNumber(
+                builder.build()
+            )
+
+        } catch (
+            error: Throwable
+        ) {
+
+            if (
+                error is FirebaseException
+            ) {
+                callbacks.onVerificationFailed(
+                    error
+                )
+            } else {
+                callbacks.onVerificationFailed(
+                    FirebaseException(
+                        error.message
+                            ?: "Unable to start phone verification."
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Verify a manually entered Firebase SMS code.
+     */
+    suspend fun verifyPhoneCode(
+        verificationId: String,
+        verificationCode: String
+    ): Result<FirebaseUser> {
+
+        return try {
+
+            if (
+                verificationId.isBlank()
+            ) {
+                throw IllegalStateException(
+                    "Phone verification session is missing."
+                )
+            }
+
+            if (
+                !verificationCode.matches(
+                    Regex("\\d{6}")
+                )
+            ) {
+                throw IllegalArgumentException(
+                    "Enter the 6-digit verification code."
+                )
+            }
+
+            val credential =
+                PhoneAuthProvider.getCredential(
+                    verificationId,
+                    verificationCode
+                )
+
+            signInWithPhoneCredential(
+                credential
+            )
+
+        } catch (
+            cancellation:
+            CancellationException
+        ) {
+
+            throw cancellation
+
+        } catch (
+            error: Throwable
+        ) {
+
+            Result.failure(
+                error
+            )
+        }
+    }
+
+    /**
+     * Complete Firebase authentication from an already-created
+     * PhoneAuthCredential.
+     *
+     * Anonymous identities are linked when present so an existing UID
+     * is preserved instead of creating an unnecessary second identity.
+     */
+    suspend fun signInWithPhoneCredential(
+        credential: PhoneAuthCredential
+    ): Result<FirebaseUser> {
+
+        return try {
+
+            val existingUser =
+                auth.currentUser
+
+            if (
+                existingUser != null &&
+                existingUser.isAnonymous
+            ) {
+
+                try {
+
+                    val linked =
+                        existingUser
+                            .linkWithCredential(
+                                credential
+                            )
+                            .awaitFirebaseUser()
+
+                    return Result.success(
+                        linked
+                    )
+
+                } catch (
+                    collision:
+                    com.google.firebase.auth.FirebaseAuthUserCollisionException
+                ) {
+
+                    val signedIn =
+                        auth
+                            .signInWithCredential(
+                                credential
+                            )
+                            .awaitFirebaseUser()
+
+                    return Result.success(
+                        signedIn
+                    )
+                }
+            }
+
+            val signedIn =
+                auth
+                    .signInWithCredential(
+                        credential
+                    )
+                    .awaitFirebaseUser()
+
+            Result.success(
+                signedIn
+            )
+
+        } catch (
+            cancellation:
+            CancellationException
+        ) {
+
+            throw cancellation
+
+        } catch (
+            error: Throwable
+        ) {
+
+            Result.failure(
+                error
+            )
+        }
     }
 
     /**
