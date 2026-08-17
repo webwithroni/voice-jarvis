@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "218806291908-o526pln8dd1r4qr3dl4if4i24vq33clp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.webwithroni.voicejarvis",
+            "certificate_hash": "537b8ed92a86c83e370492a909d9b9325ceea509"
+          }
+        },
+        {
           "client_id": "218806291908-9he1p60g712662df8cm0mgbb0qjjbmta.apps.googleusercontent.com",
           "client_type": 3
         }
