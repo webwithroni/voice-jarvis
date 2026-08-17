@@ -6,6 +6,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.google.firebase.auth.FirebaseAuth
@@ -130,9 +131,8 @@ object AuthManager {
                 ) {
                     /*
                      * No previously-authorized account was available.
-                     * Retry with all available Google accounts.
-                     *
-                     * Cancellation must never be swallowed.
+                     * Retry with all Google accounts available to the
+                     * Credential Manager provider.
                      */
                     if (
                         firstAttempt is CancellationException
@@ -140,10 +140,30 @@ object AuthManager {
                         throw firstAttempt
                     }
 
-                    requestGoogleIdToken(
-                        activity = activity,
-                        filterByAuthorizedAccounts = false
-                    )
+                    try {
+                        requestGoogleIdToken(
+                            activity = activity,
+                            filterByAuthorizedAccounts = false
+                        )
+                    } catch (
+                        secondAttempt: Throwable
+                    ) {
+                        /*
+                         * The visible UI is an explicit "Continue with
+                         * Google" button. Google provides a dedicated
+                         * Sign-in-with-Google Credential Manager option
+                         * for exactly this situation.
+                         */
+                        if (
+                            secondAttempt is CancellationException
+                        ) {
+                            throw secondAttempt
+                        }
+
+                        requestExplicitGoogleIdToken(
+                            activity
+                        )
+                    }
                 }
 
             val googleCredential =
@@ -385,6 +405,81 @@ object AuthManager {
                  */
             }
         }
+
+    /**
+     * Explicit Sign-in-with-Google button flow.
+     *
+     * This is the final fallback after the normal Credential Manager
+     * account-selection flows report that no usable credential exists.
+     */
+    private suspend fun requestExplicitGoogleIdToken(
+        activity: Activity
+    ): String {
+
+        val nonce =
+            createNonce()
+
+        val signInOption =
+            GetSignInWithGoogleOption
+                .Builder(
+                    activity.getString(
+                        R.string.default_web_client_id
+                    )
+                )
+                .setNonce(
+                    nonce
+                )
+                .build()
+
+        val request =
+            GetCredentialRequest
+                .Builder()
+                .addCredentialOption(
+                    signInOption
+                )
+                .build()
+
+        val result =
+            credentialManager(
+                activity
+            ).getCredential(
+                activity,
+                request
+            )
+
+        val credential =
+            result.credential
+
+        if (
+            credential !is CustomCredential ||
+            credential.type !=
+                GOOGLE_ID_TOKEN_TYPE
+        ) {
+
+            throw IllegalStateException(
+                "Google Sign-in credential was not returned."
+            )
+        }
+
+        return try {
+
+            GoogleIdTokenCredential
+                .createFrom(
+                    credential.data
+                )
+                .idToken
+
+        } catch (
+            error:
+            GoogleIdTokenParsingException
+        ) {
+
+            throw IllegalStateException(
+                "Unable to parse Google Sign-in ID token.",
+                error
+            )
+        }
+    }
 
     private suspend fun requestGoogleIdToken(
         activity: Activity,
