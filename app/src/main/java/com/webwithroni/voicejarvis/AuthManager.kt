@@ -1,30 +1,28 @@
 package com.webwithroni.voicejarvis
 
-import android.app.Activity
 import android.content.Context
-import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.AuthResult
+import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
-import com.google.android.gms.tasks.Task
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
  * Central authentication gateway for Voice Jarvis.
  *
- * Responsibilities:
+ * Authentication policy:
  *
- * - Firebase authentication state
- * - Sign-out
+ * - Firebase Email + Password
+ * - Password reset
+ * - Firebase sign-out
  *
- * FirebaseManager remains responsible for:
- *
- * - Firestore
- * - conversations
- * - telemetry
- * - learning data
+ * No phone authentication.
+ * No Google authentication.
+ * No signup flow.
+ * No anonymous sign-in flow.
  */
 object AuthManager {
 
@@ -38,9 +36,10 @@ object AuthManager {
         Context? =
         null
 
-    private val auth: FirebaseAuth by lazy {
-        FirebaseAuth.getInstance()
-    }
+    private val auth:
+        FirebaseAuth by lazy {
+            FirebaseAuth.getInstance()
+        }
 
     fun currentUser():
         FirebaseUser? {
@@ -50,6 +49,13 @@ object AuthManager {
     fun isSignedIn():
         Boolean {
         return auth.currentUser != null
+    }
+
+    fun isAnonymous():
+        Boolean {
+        return auth.currentUser
+            ?.isAnonymous
+            ?: false
     }
 
     fun userId():
@@ -74,18 +80,8 @@ object AuthManager {
             ?.toString()
     }
 
-    fun isAnonymous():
-        Boolean {
-        return auth.currentUser
-            ?.isAnonymous
-            ?: false
-    }
-
     /**
-     * Sign in using Firebase Email + Password.
-     *
-     * JARVIS intentionally exposes no account-creation flow.
-     * Accounts are provisioned outside the application.
+     * Firebase Email + Password sign-in.
      */
     suspend fun signInWithEmailPassword(
         email: String,
@@ -113,7 +109,7 @@ object AuthManager {
                 )
             }
 
-            val signedIn =
+            val user =
                 auth
                     .signInWithEmailAndPassword(
                         normalizedEmail,
@@ -122,7 +118,7 @@ object AuthManager {
                     .awaitFirebaseUser()
 
             Result.success(
-                signedIn
+                user
             )
 
         } catch (
@@ -133,7 +129,8 @@ object AuthManager {
             throw cancellation
 
         } catch (
-            error: Throwable
+            error:
+            Throwable
         ) {
 
             Result.failure(
@@ -143,7 +140,10 @@ object AuthManager {
     }
 
     /**
-     * Send Firebase password-reset email.
+     * Firebase password-reset email.
+     *
+     * Uses the existing Task bridge instead of relying on the
+     * kotlinx-coroutines-play-services await() extension.
      */
     suspend fun sendPasswordResetEmail(
         email: String
@@ -166,7 +166,7 @@ object AuthManager {
                 .sendPasswordResetEmail(
                     normalizedEmail
                 )
-                .await()
+                .awaitTask()
 
             Result.success(
                 Unit
@@ -180,7 +180,8 @@ object AuthManager {
             throw cancellation
 
         } catch (
-            error: Throwable
+            error:
+            Throwable
         ) {
 
             Result.failure(
@@ -191,6 +192,9 @@ object AuthManager {
 
     /**
      * Sign out from Firebase.
+     *
+     * The context parameter remains for compatibility with existing
+     * callers; no external credential manager is used.
      */
     suspend fun signOut(
         context: Context
@@ -212,7 +216,8 @@ object AuthManager {
             throw cancellation
 
         } catch (
-            error: Throwable
+            error:
+            Throwable
         ) {
 
             Result.failure(
@@ -221,10 +226,13 @@ object AuthManager {
         }
     }
 
+    /**
+     * Per-user onboarding completion.
+     */
     fun hasCompletedOnboarding():
         Boolean {
 
-        val userId =
+        val uid =
             userId()
                 ?: return false
 
@@ -239,7 +247,7 @@ object AuthManager {
             )
             .getBoolean(
                 onboardingPreferenceKey(
-                    userId
+                    uid
                 ),
                 false
             )
@@ -249,7 +257,7 @@ object AuthManager {
         completed: Boolean
     ) {
 
-        val userId =
+        val uid =
             userId()
                 ?: return
 
@@ -265,7 +273,7 @@ object AuthManager {
             .edit()
             .putBoolean(
                 onboardingPreferenceKey(
-                    userId
+                    uid
                 ),
                 completed
             )
@@ -273,16 +281,17 @@ object AuthManager {
     }
 
     private fun onboardingPreferenceKey(
-        userId: String
-    ): String {
+        uid: String
+    ):
+        String {
 
-        return "${PREF_ONBOARDING_COMPLETED}_${userId}"
+        return "${PREF_ONBOARDING_COMPLETED}_${uid}"
     }
 
     /**
-     * Compatibility bootstrap hook.
+     * Bootstrap compatibility hook.
      *
-     * No authentication is created here.
+     * No account is created here.
      */
     fun initialize(
         context: Context? = null,
@@ -299,23 +308,37 @@ object AuthManager {
         )
     }
 
-    private suspend fun Task<com.google.firebase.auth.AuthResult>.awaitFirebaseUser():
+    /**
+     * Convert a Firebase AuthResult Task into a cancellable coroutine
+     * result without requiring the Play Services coroutine await()
+     * extension.
+     */
+    private suspend fun Task<AuthResult>.awaitFirebaseUser():
         FirebaseUser =
+
         suspendCancellableCoroutine { continuation ->
 
             addOnSuccessListener { result ->
-                if (!continuation.isActive) {
+
+                if (
+                    !continuation.isActive
+                ) {
                     return@addOnSuccessListener
                 }
 
                 val user =
                     result.user
 
-                if (user != null) {
+                if (
+                    user != null
+                ) {
+
                     continuation.resume(
                         user
                     )
+
                 } else {
+
                     continuation.resumeWithException(
                         IllegalStateException(
                             "Firebase returned no authenticated user."
@@ -325,9 +348,11 @@ object AuthManager {
             }
 
             addOnFailureListener { error ->
+
                 if (
                     continuation.isActive
                 ) {
+
                     continuation.resumeWithException(
                         error
                     )
@@ -336,203 +361,50 @@ object AuthManager {
 
             continuation.invokeOnCancellation {
                 /*
-                 * Firebase Task cancellation is not universally
-                 * supported across all auth operations, so the
-                 * bridge simply stops delivering callbacks.
+                 * Firebase Auth Tasks do not consistently expose
+                 * cancellation, so callbacks are simply ignored
+                 * after coroutine cancellation.
                  */
             }
         }
 
     /**
-     * Explicit Sign-in-with-Google button flow.
-     *
-     * This is the final fallback after the normal Credential Manager
-     * account-selection flows report that no usable credential exists.
+     * Convert a Firebase Task<T> into a cancellable coroutine
+     * without the kotlinx-coroutines-play-services dependency.
      */
-    private suspend fun requestExplicitGoogleIdToken(
-        activity: Activity
-    ): String {
+    private suspend fun <T> Task<T>.awaitTask():
+        T =
 
-        val nonce =
-            createNonce()
+        suspendCancellableCoroutine { continuation ->
 
-        val signInOption =
-            GetSignInWithGoogleOption
-                .Builder(
-                    activity.getString(
-                        R.string.default_web_client_id
+            addOnSuccessListener { result ->
+
+                if (
+                    continuation.isActive
+                ) {
+
+                    continuation.resume(
+                        result
                     )
-                )
-                .setNonce(
-                    nonce
-                )
-                .build()
+                }
+            }
 
-        val request =
-            GetCredentialRequest
-                .Builder()
-                .addCredentialOption(
-                    signInOption
-                )
-                .build()
+            addOnFailureListener { error ->
 
-        val result =
-            credentialManager(
-                activity
-            ).getCredential(
-                activity,
-                request
-            )
+                if (
+                    continuation.isActive
+                ) {
 
-        val credential =
-            result.credential
-
-        if (
-            credential !is CustomCredential ||
-            credential.type !=
-                GOOGLE_ID_TOKEN_TYPE
-        ) {
-
-            throw IllegalStateException(
-                "Google Sign-in credential was not returned."
-            )
-        }
-
-        return try {
-
-            GoogleIdTokenCredential
-                .createFrom(
-                    credential.data
-                )
-                .idToken
-
-        } catch (
-            error:
-            GoogleIdTokenParsingException
-        ) {
-
-            throw IllegalStateException(
-                "Unable to parse Google Sign-in ID token.",
-                error
-            )
-        }
-    }
-
-    private suspend fun requestGoogleIdToken(
-        activity: Activity,
-        filterByAuthorizedAccounts: Boolean
-    ): String {
-
-        val nonce =
-            createNonce()
-
-        val googleIdOption =
-            GetGoogleIdOption
-                .Builder()
-                .setServerClientId(
-                    activity.getString(
-                        R.string.default_web_client_id
+                    continuation.resumeWithException(
+                        error
                     )
-                )
-                .setFilterByAuthorizedAccounts(
-                    filterByAuthorizedAccounts
-                )
-                .setAutoSelectEnabled(
-                    false
-                )
-                .setNonce(
-                    nonce
-                )
-                .build()
+                }
+            }
 
-        val request =
-            GetCredentialRequest
-                .Builder()
-                .addCredentialOption(
-                    googleIdOption
-                )
-                .build()
-
-        val result =
-            credentialManager(
-                activity
-            ).getCredential(
-                activity,
-                request
-            )
-
-        val credential =
-            result.credential
-
-        if (
-            credential !is CustomCredential ||
-            credential.type !=
-                GOOGLE_ID_TOKEN_TYPE
-        ) {
-
-            throw IllegalStateException(
-                "Google ID token credential was not returned."
-            )
+            continuation.invokeOnCancellation {
+                /*
+                 * Task cancellation is not required for this bridge.
+                 */
+            }
         }
-
-        return try {
-
-            GoogleIdTokenCredential
-                .createFrom(
-                    credential.data
-                )
-                .idToken
-
-        } catch (
-            error:
-            GoogleIdTokenParsingException
-        ) {
-
-            throw IllegalStateException(
-                "Unable to parse Google ID token.",
-                error
-            )
-        }
-    }
-
-    /**
-     * Generate a cryptographically random nonce and return a SHA-256 hash.
-     *
-     * The raw nonce never leaves this process.
-     */
-    private fun createNonce():
-        String {
-
-        val random =
-            ByteArray(32)
-
-        SecureRandom()
-            .nextBytes(
-                random
-            )
-
-        val raw =
-            Base64.encodeToString(
-                random,
-                Base64.NO_WRAP or
-                    Base64.URL_SAFE
-            )
-
-        val digest =
-            MessageDigest
-                .getInstance(
-                    "SHA-256"
-                )
-                .digest(
-                    raw.toByteArray(
-                        Charsets.UTF_8
-                    )
-                )
-
-        return Base64.encodeToString(
-            digest,
-            Base64.NO_WRAP or
-                Base64.URL_SAFE
-        )
-    }
 }
