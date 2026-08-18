@@ -686,6 +686,12 @@
         android:visibility="gone" />
 
     <View
+        android:id="@+id/thinkingCard"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
+    <View
         android:id="@+id/tipsCard"
         android:layout_width="1dp"
         android:layout_height="1dp"

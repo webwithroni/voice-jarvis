@@ -31,7 +31,7 @@ class OrbMotionController(
      */
     data class Snapshot(
         val scale: Float,
-        val coreScale: Float,
+        val innerCoreScale: Float,
         val shellScale: Float,
         val breath: Float,
         val pulse: Float,
@@ -71,7 +71,7 @@ class OrbMotionController(
     private var snapshot =
         Snapshot(
             scale = 1f,
-            coreScale = config.coreScale,
+            innerCoreScale = config.innerCoreScale,
             shellScale = config.shellScale,
             breath = 0f,
             pulse = 0f,
@@ -176,8 +176,8 @@ class OrbMotionController(
         snapshot =
             Snapshot(
                 scale = 1f,
-                coreScale =
-                    config.coreScale,
+                innerCoreScale =
+                    config.innerCoreScale,
                 shellScale =
                     config.shellScale,
                 breath = 0f,
@@ -262,11 +262,11 @@ class OrbMotionController(
                 breathing
             }
 
-        val coreScale =
+        val innerCoreScale =
             if (reducedMotion) {
-                config.coreScale
+                config.innerCoreScale
             } else {
-                config.coreScale *
+                config.innerCoreScale *
                     (
                         1f +
                             breath *
@@ -365,7 +365,7 @@ class OrbMotionController(
         snapshot =
             Snapshot(
                 scale = scale,
-                coreScale = coreScale,
+                innerCoreScale = innerCoreScale,
                 shellScale = shellScale,
                 breath = breath,
                 pulse = pulse,
