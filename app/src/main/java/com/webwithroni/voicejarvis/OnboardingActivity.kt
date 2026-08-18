@@ -28,6 +28,15 @@ import com.webwithroni.voicejarvis.orb.ParticleOrbView
  */
 class OnboardingActivity : AppCompatActivity() {
 
+    private val uiCyan: Int
+        get() = getColor(R.color.vj_cyan)
+
+    private val uiPrimaryText: Int
+        get() = getColor(R.color.vj_text_primary)
+
+    private val uiSecondaryText: Int
+        get() = getColor(R.color.vj_text_secondary)
+
     private lateinit var orb: ParticleOrbView
     private lateinit var stepText: TextView
     private lateinit var eyebrow: TextView
@@ -466,29 +475,21 @@ class OnboardingActivity : AppCompatActivity() {
                     )
 
                     background =
-                        surfaceBackground(
-                            if (
-                                voice.id.equals(
-                                    selectedVoiceId,
-                                    ignoreCase = true
-                                )
-                            ) {
-                                elevated
-                            } else {
-                                surface
-                            },
-                            16f,
-                            if (
-                                voice.id.equals(
-                                    selectedVoiceId,
-                                    ignoreCase = true
-                                )
-                            ) {
-                                cyan
-                            } else {
-                                border
-                            }
+                        getDrawable(
+                            R.drawable.vj_card_background
                         )
+
+                    alpha =
+                        if (
+                            voice.id.equals(
+                                selectedVoiceId,
+                                ignoreCase = true
+                            )
+                        ) {
+                            1f
+                        } else {
+                            0.94f
+                        }
 
                     isClickable =
                         true
@@ -552,7 +553,7 @@ class OnboardingActivity : AppCompatActivity() {
                                 android.graphics.Typeface.DEFAULT_BOLD
 
                             setTextColor(
-                                white
+                                uiPrimaryText
                             )
                         }
                     )
@@ -575,9 +576,9 @@ class OnboardingActivity : AppCompatActivity() {
                                         ignoreCase = true
                                     )
                                 ) {
-                                    cyan
+                                    uiCyan
                                 } else {
-                                    secondary
+                                    uiSecondaryText
                                 }
                             )
 
@@ -618,7 +619,7 @@ class OnboardingActivity : AppCompatActivity() {
                         18f
 
                     setTextColor(
-                        cyan
+                        uiCyan
                     )
 
                     gravity =
@@ -656,9 +657,12 @@ class OnboardingActivity : AppCompatActivity() {
 
             voiceList.addView(
                 card,
-                lp(
-                    bottom = 7
-                )
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(7)
+                }
             )
         }
     }
