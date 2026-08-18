@@ -514,7 +514,7 @@
         <Button
             android:id="@+id/enableMicButton"
 
-            style="@style/VJButtonPrimary"
+            android:background="@drawable/vj_button_primary"
 
             android:layout_width="wrap_content"
             android:layout_height="48dp"
