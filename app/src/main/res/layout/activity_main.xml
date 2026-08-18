@@ -3,72 +3,95 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+
+    android:id="@+id/homeRoot"
+
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+
     android:background="@color/vj_bg_canvas"
+
     android:clipToPadding="false"
+
     android:paddingStart="@dimen/vj_screen_horizontal"
     android:paddingEnd="@dimen/vj_screen_horizontal"
-    android:paddingTop="12dp"
-    android:paddingBottom="16dp">
 
-    <!-- ===================================================== -->
-    <!-- HEADER                                                -->
-    <!-- ===================================================== -->
+    android:paddingTop="10dp"
+    android:paddingBottom="12dp">
+
+    <!-- ================================================= -->
+    <!-- HEADER                                             -->
+    <!-- ================================================= -->
 
     <LinearLayout
         android:id="@+id/headerContainer"
-        android:layout_width="0dp"
-        android:layout_height="@dimen/vj_icon_button_size_large"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
 
-        <ImageView
-            android:id="@+id/headerLogo"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:src="@drawable/ic_jarvis_logo"
-            android:contentDescription="Voice Jarvis" />
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+
+        android:gravity="center_vertical"
+
+        android:orientation="horizontal"
+
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
         <LinearLayout
+            android:id="@+id/jarvisBrand"
+
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+
             android:layout_weight="1"
-            android:layout_marginStart="10dp"
+
             android:orientation="vertical">
 
             <TextView
-                android:id="@+id/jarvisBrand"
+                android:id="@+id/brandTitle"
+
                 style="@style/VJTextTitle"
+
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+
                 android:text="JARVIS"
-                android:letterSpacing="0.18" />
+
+                android:letterSpacing="0.16" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+
                 android:layout_marginTop="3dp"
+
                 android:gravity="center_vertical"
+
                 android:orientation="horizontal">
 
                 <View
                     android:id="@+id/connectionDot"
+
                     android:layout_width="6dp"
                     android:layout_height="6dp"
+
                     android:background="@drawable/bg_avatar_jarvis" />
 
                 <TextView
                     android:id="@+id/connectionLabel"
+
                     style="@style/VJTextCaption"
+
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+
                     android:layout_marginStart="6dp"
-                    android:text="VOICE • ONLINE"
-                    android:letterSpacing="0.08" />
+
+                    android:text="VOICE • READY"
+
+                    android:textColor="@color/vj_text_secondary"
+
+                    android:letterSpacing="0.06" />
 
             </LinearLayout>
 
@@ -76,521 +99,602 @@
 
         <ImageButton
             android:id="@+id/historyButton"
+
             android:layout_width="@dimen/vj_icon_button_size"
             android:layout_height="@dimen/vj_icon_button_size"
-            android:padding="12dp"
+
             android:background="@drawable/vj_icon_button_background"
+
+            android:contentDescription="Conversation history"
+
+            android:padding="11dp"
+
             android:src="@drawable/ic_history"
-            android:tint="@color/vj_text_primary"
-            android:contentDescription="Conversation History" />
+
+            android:tint="@color/vj_text_primary" />
 
         <ImageButton
             android:id="@+id/settingsButton"
+
             android:layout_width="@dimen/vj_icon_button_size"
             android:layout_height="@dimen/vj_icon_button_size"
+
             android:layout_marginStart="8dp"
-            android:padding="12dp"
+
             android:background="@drawable/vj_icon_button_background"
+
+            android:contentDescription="Settings"
+
+            android:padding="11dp"
+
             android:src="@drawable/ic_settings"
-            android:tint="@color/vj_text_primary"
-            android:contentDescription="Settings" />
+
+            android:tint="@color/vj_text_primary" />
 
     </LinearLayout>
 
-    <!-- ===================================================== -->
-    <!-- PRIMARY ORB STAGE                                     -->
-    <!-- ===================================================== -->
+    <!-- ================================================= -->
+    <!-- PARTICLE ORB STAGE                                 -->
+    <!-- ================================================= -->
 
     <FrameLayout
         android:id="@+id/orbStage"
+
         android:layout_width="0dp"
         android:layout_height="0dp"
+
         android:layout_marginTop="4dp"
-        android:layout_marginBottom="0dp"
+        android:layout_marginBottom="2dp"
+
         android:clipChildren="false"
         android:clipToPadding="false"
+
         app:layout_constraintTop_toBottomOf="@id/headerContainer"
-        app:layout_constraintBottom_toTopOf="@id/stateContainer"
+
+        app:layout_constraintBottom_toTopOf="@id/voiceStateGroup"
+
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <com.webwithroni.voicejarvis.orb.HumanoidOrbView
+        <com.webwithroni.voicejarvis.orb.ParticleOrbView
             android:id="@+id/orbView"
+
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:contentDescription="Jarvis Neural Orb" />
 
-        <ImageView
-            android:id="@+id/orbCenterIcon"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:layout_gravity="center"
-            android:padding="14dp"
-            android:visibility="gone"
-            android:contentDescription="Jarvis status icon" />
-
-        <!-- Small contextual label floating inside the Orb stage. -->
-        <TextView
-            android:id="@+id/orbModeLabel"
-            style="@style/VJTextCaption"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal|bottom"
-            android:layout_marginBottom="18dp"
-            android:text="NEURAL CORE"
-            android:textColor="@color/vj_text_tertiary"
-            android:letterSpacing="0.16" />
+            android:contentDescription="Voice Jarvis particle orb" />
 
     </FrameLayout>
 
-    <!-- ===================================================== -->
-    <!-- STATE                                                -->
-    <!-- ===================================================== -->
+    <!-- ================================================= -->
+    <!-- STATE                                               -->
+    <!-- ================================================= -->
 
     <LinearLayout
-        android:id="@+id/stateContainer"
+        android:id="@+id/voiceStateGroup"
+
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+
         android:gravity="center_horizontal"
+
         android:orientation="vertical"
-        app:layout_constraintBottom_toTopOf="@id/contentScroll"
+
+        app:layout_constraintBottom_toTopOf="@id/interactionGroup"
+
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <TextView
             android:id="@+id/stateLabel"
+
             style="@style/VJStateLabel"
+
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+
             android:background="@drawable/vj_state_pill"
-            android:paddingStart="14dp"
-            android:paddingTop="7dp"
-            android:paddingEnd="14dp"
-            android:paddingBottom="7dp"
-            android:text="LISTENING" />
+
+            android:paddingStart="13dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="13dp"
+            android:paddingBottom="6dp"
+
+            android:text="LISTENING"
+
+            android:textAllCaps="true" />
 
         <TextView
             android:id="@+id/microcopy"
+
             style="@style/VJTextBody"
+
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="7dp"
+
+            android:layout_marginTop="6dp"
+
+            android:gravity="center"
+
+            android:maxLines="2"
+
             android:text="I'm listening."
+
             android:textColor="@color/vj_text_secondary" />
 
     </LinearLayout>
 
-    <!-- ===================================================== -->
-    <!-- CONTEXT AREA                                         -->
-    <!-- ===================================================== -->
+    <!-- ================================================= -->
+    <!-- INTERACTION GROUP                                   -->
+    <!-- ================================================= -->
 
-    <ScrollView
-        android:id="@+id/contentScroll"
+    <LinearLayout
+        android:id="@+id/interactionGroup"
+
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:layout_marginBottom="10dp"
-        android:clipToPadding="false"
+
+        android:gravity="center_horizontal"
+
+        android:orientation="vertical"
+
+        app:layout_constraintBottom_toTopOf="@id/homeActions"
+
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:id="@+id/primaryVoiceButton"
+
+            android:layout_width="wrap_content"
+            android:layout_height="54dp"
+
+            android:background="@drawable/vj_button_primary"
+
+            android:clickable="true"
+            android:focusable="true"
+
+            android:gravity="center"
+
+            android:minWidth="176dp"
+
+            android:paddingStart="22dp"
+            android:paddingEnd="22dp">
+
+            <ImageView
+                android:id="@+id/primaryVoiceIcon"
+
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+
+                android:contentDescription="Voice"
+
+                android:src="@drawable/ic_mic"
+
+                android:tint="@color/vj_text_primary" />
+
+            <TextView
+                android:id="@+id/primaryVoiceLabel"
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:layout_marginStart="9dp"
+
+                android:text="TALK"
+
+                android:textColor="@color/vj_text_primary"
+
+                android:textSize="14sp"
+
+                android:textStyle="bold"
+
+                android:letterSpacing="0.08" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/muteControl"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_marginTop="8dp"
+
+            android:gravity="center"
+
+            android:orientation="horizontal"
+
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:id="@+id/muteIcon"
+
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+
+                android:contentDescription="Mute or resume"
+
+                android:src="@drawable/ic_mute"
+
+                android:tint="@color/vj_text_secondary" />
+
+            <TextView
+                android:id="@+id/muteLabel"
+
+                style="@style/VJTextCaption"
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:layout_marginStart="6dp"
+
+                android:text="MUTE"
+
+                android:textColor="@color/vj_text_secondary"
+
+                android:letterSpacing="0.08" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- ================================================= -->
+    <!-- HOME ACTIONS                                        -->
+    <!-- ================================================= -->
+
+    <LinearLayout
+        android:id="@+id/homeActions"
+
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+
+        android:gravity="center"
+
+        android:orientation="horizontal"
+
+        app:layout_constraintBottom_toBottomOf="parent"
+
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:id="@+id/homeHistoryHint"
+
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+
+            android:layout_weight="1"
+
+            android:background="@drawable/vj_button_secondary"
+
+            android:clickable="true"
+            android:focusable="true"
+
+            android:gravity="center">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+
+                android:src="@drawable/ic_history"
+
+                android:tint="@color/vj_text_primary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:layout_marginStart="7dp"
+
+                android:text="HISTORY"
+
+                android:textColor="@color/vj_text_primary"
+
+                android:textSize="12sp"
+
+                android:textStyle="bold"
+
+                android:letterSpacing="0.06" />
+
+        </LinearLayout>
+
+        <Space
+            android:layout_width="8dp"
+            android:layout_height="1dp" />
+
+        <LinearLayout
+            android:id="@+id/homeToolsHint"
+
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+
+            android:layout_weight="1"
+
+            android:background="@drawable/vj_button_secondary"
+
+            android:clickable="true"
+            android:focusable="true"
+
+            android:gravity="center">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+
+                android:src="@drawable/ic_accessibility"
+
+                android:tint="@color/vj_text_primary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:layout_marginStart="7dp"
+
+                android:text="TOOLS"
+
+                android:textColor="@color/vj_text_primary"
+
+                android:textSize="12sp"
+
+                android:textStyle="bold"
+
+                android:letterSpacing="0.06" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- ================================================= -->
+    <!-- OVERLAY STATES                                      -->
+    <!-- ================================================= -->
+
+    <!-- Permission overlay -->
+
+    <LinearLayout
+        android:id="@+id/permissionCard"
+
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+
+        android:background="@drawable/vj_card_background"
+
+        android:gravity="center"
+
+        android:orientation="vertical"
+
+        android:padding="20dp"
+
+        android:visibility="gone"
+
+        app:layout_constraintTop_toBottomOf="@id/headerContainer"
+
+        app:layout_constraintBottom_toTopOf="@id/homeActions"
+
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:text="MICROPHONE REQUIRED"
+
+            android:textColor="@color/vj_text_primary"
+
+            android:textSize="15sp"
+
+            android:textStyle="bold"
+
+            android:letterSpacing="0.05" />
+
+        <TextView
+            android:id="@+id/permissionMessage"
+
+            style="@style/VJTextBody"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_marginTop="8dp"
+
+            android:gravity="center"
+
+            android:text="Allow microphone access to talk with Jarvis."
+
+            android:textColor="@color/vj_text_secondary"
+
+            android:maxWidth="320dp" />
+
+        <Button
+            android:id="@+id/enableMicButton"
+
+            style="@style/VJButtonPrimary"
+
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+
+            android:layout_marginTop="14dp"
+
+            android:text="ENABLE MICROPHONE" />
+
+    </LinearLayout>
+
+    <!-- Conversation surface -->
+
+    <ScrollView
+        android:id="@+id/conversationCard"
+
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+
+        android:layout_marginStart="6dp"
+        android:layout_marginEnd="6dp"
+        android:layout_marginBottom="8dp"
+
+        android:background="@drawable/vj_card_background"
+
         android:fillViewport="false"
-        android:scrollbars="none"
-        app:layout_constraintBottom_toTopOf="@id/bottomDock"
+
+        android:visibility="gone"
+
+        app:layout_constraintBottom_toTopOf="@id/interactionGroup"
+
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
 
-            <!-- THINKING -->
+            android:orientation="vertical"
+
+            android:padding="12dp">
 
             <LinearLayout
-                android:id="@+id/thinkingCard"
+                android:id="@+id/userBlock"
+
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/vj_card_background"
+
                 android:orientation="vertical"
-                android:padding="@dimen/vj_card_padding_large"
+
                 android:visibility="gone">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical">
-
-                    <View
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
-                        android:background="@drawable/bg_avatar_jarvis" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:text="PROCESSING"
-                        style="@style/VJTextCaption"
-                        android:textColor="@color/vj_violet"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.12" />
-
-                </LinearLayout>
-
                 <TextView
-                    android:id="@+id/currentRequestText"
+                    android:id="@+id/userBubble"
+
                     style="@style/VJTextBody"
+
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="—"
-                    android:lineSpacingExtra="4dp" />
+
+                    android:textColor="@color/vj_text_primary" />
 
                 <TextView
-                    android:id="@+id/processStep0"
-                    style="@style/VJTextSecondary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="○  Understanding your question" />
+                    android:id="@+id/userTime"
 
-                <TextView
-                    android:id="@+id/processStep1"
-                    style="@style/VJTextSecondary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="7dp"
-                    android:text="○  Working on it" />
-
-                <TextView
-                    android:id="@+id/processStep2"
-                    style="@style/VJTextSecondary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="7dp"
-                    android:text="○  Preparing response" />
-
-            </LinearLayout>
-
-            <!-- PAUSED -->
-
-            <LinearLayout
-                android:id="@+id/pausedCard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/vj_card_background"
-                android:orientation="vertical"
-                android:padding="@dimen/vj_card_padding"
-                android:visibility="gone">
-
-                <TextView
                     style="@style/VJTextCaption"
+
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="JARVIS IS PAUSED"
-                    android:textColor="@color/vj_state_paused"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.08" />
 
-                <TextView
-                    style="@style/VJTextSecondary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="7dp"
-                    android:text="Resume whenever you're ready." />
+                    android:layout_marginTop="4dp"
+
+                    android:textColor="@color/vj_text_tertiary" />
 
             </LinearLayout>
 
-            <!-- ERROR -->
-
             <LinearLayout
-                android:id="@+id/tipsCard"
+                android:id="@+id/jarvisBlock"
+
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/vj_card_background"
+
+                android:layout_marginTop="10dp"
+
                 android:orientation="vertical"
-                android:padding="@dimen/vj_card_padding"
+
                 android:visibility="gone">
 
                 <TextView
+                    android:id="@+id/jarvisBubble"
+
+                    style="@style/VJTextBody"
+
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+
+                    android:textColor="@color/vj_text_primary" />
+
+                <TextView
+                    android:id="@+id/jarvisTime"
+
                     style="@style/VJTextCaption"
+
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="DIDN'T CATCH THAT"
-                    android:textColor="@color/vj_state_error"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.08" />
 
-                <TextView
-                    style="@style/VJTextSecondary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="7dp"
-                    android:text="Try again naturally. You can speak in English, Hindi, Bengali or Hinglish."
-                    android:lineSpacingExtra="3dp" />
+                    android:layout_marginTop="4dp"
+
+                    android:textColor="@color/vj_text_tertiary" />
 
             </LinearLayout>
-
-            <!-- LATEST EXCHANGE -->
-
-            <LinearLayout
-                android:id="@+id/conversationCard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <LinearLayout
-                    android:id="@+id/userBlock"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/vj_card_background"
-                    android:orientation="vertical"
-                    android:padding="@dimen/vj_card_padding"
-                    android:layout_marginBottom="8dp"
-                    android:visibility="gone">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical">
-
-                        <View
-                            android:layout_width="7dp"
-                            android:layout_height="7dp"
-                            android:background="@drawable/bg_avatar_user" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="YOU"
-                            style="@style/VJTextCaption"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/userTime"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            style="@style/VJTextCaption" />
-
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/userBubble"
-                        style="@style/VJTextBody"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="9dp"
-                        android:textColor="@color/vj_text_primary"
-                        android:lineSpacingExtra="4dp" />
-
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/jarvisBlock"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/vj_card_background"
-                    android:orientation="vertical"
-                    android:padding="@dimen/vj_card_padding"
-                    android:visibility="gone">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical">
-
-                        <View
-                            android:layout_width="7dp"
-                            android:layout_height="7dp"
-                            android:background="@drawable/bg_avatar_jarvis" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="JARVIS"
-                            style="@style/VJTextCaption"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/jarvisTime"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            style="@style/VJTextCaption" />
-
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/jarvisBubble"
-                        style="@style/VJTextBody"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="9dp"
-                        android:textColor="@color/vj_text_primary"
-                        android:lineSpacingExtra="4dp" />
-
-                </LinearLayout>
-
-            </LinearLayout>
-
-            <!-- DEBUG / DIAGNOSTICS -->
-
-            <ScrollView
-                android:id="@+id/debugScroll"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:visibility="gone"
-                android:scrollbars="none">
-
-                <TextView
-                    android:id="@+id/statusText"
-                    style="@style/VJTextCaption"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingTop="12dp"
-                    android:lineSpacingExtra="3dp" />
-
-            </ScrollView>
 
         </LinearLayout>
 
     </ScrollView>
 
-    <!-- ===================================================== -->
-    <!-- BOTTOM COMMAND DOCK                                  -->
-    <!-- ===================================================== -->
+    <!-- ================================================= -->
+    <!-- LEGACY / PROGRAMMATIC UI HOOKS                     -->
+    <!-- ================================================= -->
 
-    <LinearLayout
-        android:id="@+id/bottomDock"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:orientation="vertical"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+    <!-- These views remain present for MainActivity compatibility.
+         They are intentionally hidden from the new Home surface. -->
 
-        <LinearLayout
-            android:id="@+id/quickActions"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="horizontal">
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/homeHistoryHint"
-                style="@style/VJTextCaption"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingStart="12dp"
-                android:paddingTop="8dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="8dp"
-                android:text="HISTORY"
-                android:textColor="@color/vj_text_secondary"
-                android:letterSpacing="0.08" />
+    <ImageView
+        android:id="@+id/orbCenterIcon"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/homeToolsHint"
-                style="@style/VJTextCaption"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="14dp"
-                android:paddingStart="12dp"
-                android:paddingTop="8dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="8dp"
-                android:text="TOOLS"
-                android:textColor="@color/vj_text_secondary"
-                android:letterSpacing="0.08" />
+    <TextView
+        android:id="@+id/orbModeLabel"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-        </LinearLayout>
+    <TextView
+        android:id="@+id/currentRequestText"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-        <ImageView
-            android:id="@+id/muteIcon"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
-            android:layout_marginTop="4dp"
-            android:padding="17dp"
-            android:background="@drawable/vj_icon_button_background"
-            android:src="@drawable/ic_mute"
-            android:contentDescription="Mute Jarvis"
-            android:clickable="true"
-            android:focusable="true" />
+    <TextView
+        android:id="@+id/processStep0"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/muteLabel"
-            style="@style/VJTextCaption"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="MUTE"
-            android:textColor="@color/vj_text_secondary"
-            android:textStyle="bold"
-            android:letterSpacing="0.10" />
+    <TextView
+        android:id="@+id/processStep1"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-    </LinearLayout>
+    <TextView
+        android:id="@+id/processStep2"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-    <!-- ===================================================== -->
-    <!-- PERMISSION TAKEOVER                                  -->
-    <!-- ===================================================== -->
+    <View
+        android:id="@+id/pausedCard"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-    <LinearLayout
-        android:id="@+id/permissionCard"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:background="@color/vj_bg_canvas"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:padding="28dp"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+    <View
+        android:id="@+id/tipsCard"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
-        <ImageView
-            android:layout_width="76dp"
-            android:layout_height="76dp"
-            android:src="@drawable/ic_mic"
-            android:padding="20dp"
-            android:background="@drawable/vj_state_pill" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="MICROPHONE ACCESS NEEDED"
-            style="@style/VJTextHeading"
-            android:textColor="@color/vj_state_error"
-            android:textStyle="bold"
-            android:letterSpacing="0.06" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:gravity="center"
-            android:text="Jarvis needs microphone access to hear and respond to you."
-            style="@style/VJTextBody"
-            android:lineSpacingExtra="3dp" />
-
-        <Button
-            android:id="@+id/enableMicButton"
-            style="@style/VJButton"
-            android:layout_width="match_parent"
-            android:layout_height="@dimen/vj_button_height"
-            android:layout_marginTop="24dp"
-            android:text="Enable microphone"
-            android:textColor="@color/vj_bg_canvas"
-            android:background="@drawable/vj_button_primary" />
-
-    </LinearLayout>
+    <ScrollView
+        android:id="@+id/debugScroll"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

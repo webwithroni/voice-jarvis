@@ -19,7 +19,7 @@ import kotlin.math.sin
  * 4. orbit particles
  * 5. energy shell
  * 6. inner shell
- * 7. humanoid face
+ * 7. abstract energy field
  *
  * This class owns visual composition only.
  *
@@ -68,9 +68,6 @@ class OrbRenderer(
 
     private val ripplePath =
         Path()
-
-    private val faceRenderer =
-        OrbFaceRenderer()
 
     private val particles =
         OrbParticleSystem(
@@ -399,48 +396,10 @@ class OrbRenderer(
         )
 
         /*
-         * ------------------------------------------------------
-         * 7. HUMANOID FACE
-         * ------------------------------------------------------
-         */
-        faceRenderer.draw(
-            canvas =
-                canvas,
-            centerX =
-                centerX,
-            centerY =
-                centerY,
-            radius =
-                visualRadius *
-                    (
-                        motion.coreScale
-                    ),
-            state =
-                state,
-            activity =
-                activity,
-            amplitude =
-                motion.faceEnergy *
-                    audioAmplitude,
-            timeSeconds =
-                if (initialized) {
-                    nowNanos /
-                        1_000_000_000f
-                } else {
-                    0f
-                },
-            breath =
-                motion.breath,
-            pulse =
-                motion.pulse,
-            audioEnergy =
-                motion.audioEnergy,
-            fieldWarp =
-                motion.fieldWarp
-        )
-
-        /*
          * Final initialization marker.
+         *
+         * The Orb is intentionally abstract:
+         * particles + energy + motion only.
          */
         initialized =
             true
@@ -619,7 +578,7 @@ class OrbRenderer(
 
             /*
              * Slight elliptical compression keeps the
-             * particle field humanoid rather than perfectly
+             * particle field organic rather than perfectly
              * spherical.
              */
             val clampedX =
@@ -900,7 +859,7 @@ class OrbRenderer(
 
         val startRadius =
             radius *
-                motion.coreScale *
+                motion.innerCoreScale *
                 1.12f
 
         val endRadius =
@@ -1122,7 +1081,7 @@ class OrbRenderer(
     }
 
     /**
-     * Inner shell establishes the darker humanoid volume.
+     * Inner shell establishes the darker inner energy volume.
      */
     private fun drawInnerShell(
         canvas: Canvas,
@@ -1139,7 +1098,7 @@ class OrbRenderer(
 
         val innerRadius =
             radius *
-                motion.coreScale *
+                motion.innerCoreScale *
                 1.25f
 
         innerShellPaint.style =
@@ -1190,7 +1149,7 @@ class OrbRenderer(
          * Inner neural membrane.
          *
          * This is deliberately weaker than the outer membrane,
-         * creating layered depth around the humanoid core.
+         * creating layered depth around the inner energy core.
          */
         ringPaint.style =
             Paint.Style.STROKE

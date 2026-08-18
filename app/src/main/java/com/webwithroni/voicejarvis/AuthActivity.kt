@@ -15,7 +15,7 @@ import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthProvider
-import com.webwithroni.voicejarvis.orb.HumanoidOrbView
+import com.webwithroni.voicejarvis.orb.ParticleOrbView
 import com.webwithroni.voicejarvis.orb.OrbActivity
 import com.webwithroni.voicejarvis.orb.OrbState
 import kotlinx.coroutines.launch
@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
  */
 class AuthActivity : AppCompatActivity() {
 
-    private lateinit var orb: HumanoidOrbView
+    private lateinit var orb: ParticleOrbView
 
     private lateinit var phoneInput: EditText
     private lateinit var sendOtpButton: Button

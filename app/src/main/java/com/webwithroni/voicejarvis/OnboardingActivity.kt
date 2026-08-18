@@ -6,7 +6,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import com.webwithroni.voicejarvis.orb.HumanoidOrbView
+import com.webwithroni.voicejarvis.orb.ParticleOrbView
 import com.webwithroni.voicejarvis.orb.OrbActivity
 import com.webwithroni.voicejarvis.orb.OrbState
 
@@ -21,7 +21,7 @@ import com.webwithroni.voicejarvis.orb.OrbState
  */
 class OnboardingActivity : AppCompatActivity() {
 
-    private lateinit var orb: HumanoidOrbView
+    private lateinit var orb: ParticleOrbView
     private lateinit var stepText: TextView
     private lateinit var eyebrow: TextView
     private lateinit var title: TextView

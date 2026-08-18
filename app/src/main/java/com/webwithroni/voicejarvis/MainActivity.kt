@@ -26,7 +26,7 @@ import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderF
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.webwithroni.voicejarvis.orb.HumanoidOrbView
+import com.webwithroni.voicejarvis.orb.ParticleOrbView
 import com.webwithroni.voicejarvis.orb.OrbActivity
 import com.webwithroni.voicejarvis.orb.OrbState
 
@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     private lateinit var microcopy: TextView
     private lateinit var muteIcon: ImageView
     private lateinit var muteLabel: TextView
-    private lateinit var orb: HumanoidOrbView
+    private lateinit var orb: ParticleOrbView
     private lateinit var orbCenterIcon: ImageView
     private lateinit var conversationCard: View
     private lateinit var userBlock: View
@@ -219,6 +219,33 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
 
         muteIcon.setOnClickListener { service?.toggleMute(); reflectMuteUi() }
         muteLabel.setOnClickListener { muteIcon.performClick() }
+
+        findViewById<View>(R.id.primaryVoiceButton).setOnClickListener {
+            val svc = service
+
+            if (svc == null) {
+                ensurePermissionsThenStart()
+                return@setOnClickListener
+            }
+
+            when {
+                svc.isPaused -> {
+                    svc.toggleMute()
+                    reflectMuteUi()
+                }
+
+                svc.currentState == JarvisState.SPEAKING -> {
+                    svc.interruptSpeaking()
+                }
+
+                else -> {
+                    /*
+                     * Jarvis is already available for voice input.
+                     * Do not restart the service or interrupt a live turn.
+                     */
+                }
+            }
+        }
 
         syncOrbMotionPreference()
 
@@ -706,22 +733,22 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
             when (state) {
 
                 JarvisState.LISTENING ->
-                    "NEURAL CORE"
+                    "Ready"
 
                 JarvisState.HEARING ->
-                    "VOICE INPUT"
+                    "Listening"
 
                 JarvisState.THINKING ->
-                    "COGNITIVE PROCESS"
+                    "Thinking"
 
                 JarvisState.SPEAKING ->
-                    "VOICE OUTPUT"
+                    "Speaking"
 
                 JarvisState.ERROR ->
-                    "RECOVERY"
+                    "Something went wrong"
 
                 JarvisState.PAUSED ->
-                    "STANDBY"
+                    "Paused"
             }
 
         connectionLabel.text =
@@ -891,7 +918,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
             /*
              * Mic signal is meaningful for HEARING.
              *
-             * OrbAudioReactive inside HumanoidOrbView
+             * OrbAudioReactive inside ParticleOrbView
              * performs the visual noise-gate, normalization,
              * and smoothing.
              */

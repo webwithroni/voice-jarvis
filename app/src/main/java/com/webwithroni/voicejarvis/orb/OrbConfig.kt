@@ -17,9 +17,9 @@ data class OrbConfig(
     val particleCount: Int = 240,
 
     /**
-     * Relative humanoid core size.
+     * Relative inner energy core size.
      */
-    val coreScale: Float = 0.62f,
+    val innerCoreScale: Float = 0.62f,
 
     /**
      * Relative outer energy shell size.

@@ -50,7 +50,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <com.webwithroni.voicejarvis.orb.HumanoidOrbView
+        <com.webwithroni.voicejarvis.orb.ParticleOrbView
             android:id="@+id/onboardingOrb"
             android:layout_width="match_parent"
             android:layout_height="match_parent"

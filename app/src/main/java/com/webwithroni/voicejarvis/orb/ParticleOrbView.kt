@@ -7,22 +7,20 @@ import android.view.View
 import kotlin.math.max
 
 /**
- * Public Android View for the Jarvis Orb.
+ * Public Android View for the Voice Jarvis particle orb.
  *
- * This is the ONLY Orb class MainActivity should talk to.
+ * Visual identity:
+ * - floating particles
+ * - abstract energy field
+ * - no abstract energy field
+ * - no eyes
+ * - no mouth
+ * - no avatar
  *
- * Public API:
- *
- * - setState()
- * - setActivity()
- * - setMicAmplitude()
- * - setPlaybackAmplitude()
- * - setReducedMotion()
- * - reset()
- *
- * Internal rendering remains delegated to OrbRenderer.
+ * The View is intentionally thin.
+ * All visual simulation remains inside OrbRenderer.
  */
-class HumanoidOrbView @JvmOverloads constructor(
+class ParticleOrbView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
@@ -56,12 +54,6 @@ class HumanoidOrbView @JvmOverloads constructor(
     private var attached =
         false
 
-    private var lastWidth =
-        0
-
-    private var lastHeight =
-        0
-
     init {
 
         setLayerType(
@@ -69,11 +61,10 @@ class HumanoidOrbView @JvmOverloads constructor(
             null
         )
 
-        isFocusable =
-            false
+        isFocusable = false
 
-        importantForAccessibility =
-            IMPORTANT_FOR_ACCESSIBILITY_NO
+        contentDescription =
+            "Voice Jarvis particle orb"
 
         renderer.setState(
             state
@@ -88,32 +79,26 @@ class HumanoidOrbView @JvmOverloads constructor(
         )
     }
 
-    /**
-     * Change the primary Orb state.
-     */
     fun setState(
         value: OrbState
     ) {
 
         if (
-            state ==
-            value
+            state == value
         ) {
             return
         }
 
-        state =
-            value
+        state = value
 
         /*
-         * Never carry microphone energy into SPEAKING,
-         * or playback energy into HEARING.
+         * Do not leak microphone energy into speaking,
+         * or speaker energy into hearing.
          */
         micReactive.reset()
         playbackReactive.reset()
 
-        audioAmplitude =
-            0f
+        audioAmplitude = 0f
 
         renderer.setState(
             value
@@ -126,22 +111,17 @@ class HumanoidOrbView @JvmOverloads constructor(
         invalidate()
     }
 
-    /**
-     * Change contextual Orb activity.
-     */
     fun setActivity(
         value: OrbActivity
     ) {
 
         if (
-            activity ==
-            value
+            activity == value
         ) {
             return
         }
 
-        activity =
-            value
+        activity = value
 
         renderer.setActivity(
             value
@@ -150,23 +130,14 @@ class HumanoidOrbView @JvmOverloads constructor(
         invalidate()
     }
 
-    /**
-     * Supply raw microphone RMS for HEARING.
-     *
-     * OrbAudioReactive performs:
-     *
-     * noise gate
-     * normalization
-     * smoothing
-     */
     fun setMicAmplitude(
         value: Float
     ) {
 
         if (
-            state !=
-                OrbState.HEARING
+            state != OrbState.HEARING
         ) {
+
             micReactive.reset()
             return
         }
@@ -186,20 +157,14 @@ class HumanoidOrbView @JvmOverloads constructor(
         invalidate()
     }
 
-    /**
-     * Supply raw playback RMS for SPEAKING.
-     *
-     * This path is intentionally independent from the
-     * microphone reactive processor.
-     */
     fun setPlaybackAmplitude(
         value: Float
     ) {
 
         if (
-            state !=
-                OrbState.SPEAKING
+            state != OrbState.SPEAKING
         ) {
+
             playbackReactive.reset()
             return
         }
@@ -219,22 +184,17 @@ class HumanoidOrbView @JvmOverloads constructor(
         invalidate()
     }
 
-    /**
-     * Enable or disable reduced motion.
-     */
     fun setReducedMotion(
         enabled: Boolean
     ) {
 
         if (
-            reducedMotion ==
-            enabled
+            reducedMotion == enabled
         ) {
             return
         }
 
-        reducedMotion =
-            enabled
+        reducedMotion = enabled
 
         renderer.setReducedMotion(
             enabled
@@ -243,44 +203,10 @@ class HumanoidOrbView @JvmOverloads constructor(
         invalidate()
     }
 
-    /**
-     * Reset Orb simulation while preserving the currently
-     * selected state/activity/audio configuration.
-     */
     fun reset() {
 
         micReactive.reset()
         playbackReactive.reset()
-
-        renderer.reset()
-
-        renderer.setState(
-            state
-        )
-
-        renderer.setActivity(
-            activity
-        )
-
-        renderer.setReducedMotion(
-            reducedMotion
-        )
-
-        invalidate()
-    }
-
-    override fun onAttachedToWindow() {
-
-        super.onAttachedToWindow()
-
-        attached =
-            true
-
-        lastWidth =
-            width
-
-        lastHeight =
-            height
 
         renderer.reset()
 
@@ -298,14 +224,41 @@ class HumanoidOrbView @JvmOverloads constructor(
 
         renderer.setReducedMotion(
             reducedMotion
-
         )
+
+        invalidate()
+    }
+
+    override fun onAttachedToWindow() {
+
+        super.onAttachedToWindow()
+
+        attached = true
+
+        renderer.reset()
+
+        renderer.setState(
+            state
+        )
+
+        renderer.setActivity(
+            activity
+        )
+
+        renderer.setAudioAmplitude(
+            audioAmplitude
+        )
+
+        renderer.setReducedMotion(
+            reducedMotion
+        )
+
+        postInvalidateOnAnimation()
     }
 
     override fun onDetachedFromWindow() {
 
-        attached =
-            false
+        attached = false
 
         super.onDetachedFromWindow()
     }
@@ -323,12 +276,6 @@ class HumanoidOrbView @JvmOverloads constructor(
             oldWidth,
             oldHeight
         )
-
-        lastWidth =
-            width
-
-        lastHeight =
-            height
 
         renderer.reset()
     }
@@ -361,22 +308,12 @@ class HumanoidOrbView @JvmOverloads constructor(
         }
 
         renderer.draw(
-            canvas =
-                canvas,
-            width =
-                safeWidth.toFloat(),
-            height =
-                safeHeight.toFloat()
+            canvas = canvas,
+            width = safeWidth.toFloat(),
+            height = safeHeight.toFloat()
         )
 
-        /*
-         * Continuous render loop.
-         *
-         * The renderer internally limits frame delta,
-         * making this tolerant of occasional frame drops.
-         */
         if (attached) {
-
             postInvalidateOnAnimation()
         }
     }
@@ -392,25 +329,15 @@ class HumanoidOrbView @JvmOverloads constructor(
         )
 
         if (
-            visibility ==
-                VISIBLE
+            visibility == VISIBLE
         ) {
-
             postInvalidateOnAnimation()
         }
     }
 
-    /**
-     * Expose current base state for diagnostics/tests.
-     */
-    fun currentState():
-        OrbState =
+    fun currentState(): OrbState =
         state
 
-    /**
-     * Expose current activity for diagnostics/tests.
-     */
-    fun currentActivity():
-        OrbActivity =
+    fun currentActivity(): OrbActivity =
         activity
 }
