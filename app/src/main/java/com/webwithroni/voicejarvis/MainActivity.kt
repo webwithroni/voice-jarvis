@@ -61,8 +61,8 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     private lateinit var enableMicButton: Button
     private lateinit var connectionLabel: TextView
     private lateinit var orbModeLabel: TextView
-    private lateinit var homeHistoryHint: TextView
-    private lateinit var homeToolsHint: TextView
+    private lateinit var homeHistoryHint: View
+    private lateinit var homeToolsHint: View
 
     private var service: JarvisService? = null
     private var bound = false
