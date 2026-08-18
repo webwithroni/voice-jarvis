@@ -3,17 +3,24 @@ package com.webwithroni.voicejarvis
 /**
  * Gemini Live voice catalogue.
  *
- * These are the currently documented Gemini prebuilt voices.
+ * Gender is intentionally optional because the existing source data
+ * does not establish authoritative gender metadata for every voice.
  *
- * Keep this file independent from the realtime client so the UI,
- * preferences and runtime all use the same source of truth.
+ * Keep this model independent from UI and networking.
  */
 object VoiceCatalog {
+
+    enum class Gender {
+        FEMALE,
+        MALE,
+        UNSPECIFIED
+    }
 
     data class Voice(
         val id: String,
         val name: String,
-        val character: String
+        val character: String,
+        val gender: Gender = Gender.UNSPECIFIED
     )
 
     val all: List<Voice> = listOf(
@@ -51,17 +58,29 @@ object VoiceCatalog {
 
     const val DEFAULT_VOICE = "Aoede"
 
-    fun find(id: String?): Voice {
+    fun find(
+        id: String?
+    ): Voice {
+
         return all.firstOrNull {
-            it.id.equals(id, ignoreCase = true)
+            it.id.equals(
+                id,
+                ignoreCase = true
+            )
         } ?: all.first {
             it.id == DEFAULT_VOICE
         }
     }
 
-    fun contains(id: String?): Boolean {
+    fun contains(
+        id: String?
+    ): Boolean {
+
         return all.any {
-            it.id.equals(id, ignoreCase = true)
+            it.id.equals(
+                id,
+                ignoreCase = true
+            )
         }
     }
 }

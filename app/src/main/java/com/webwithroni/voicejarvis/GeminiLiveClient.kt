@@ -943,6 +943,68 @@ class GeminiLiveClient(
     }
 
     /**
+     * Send a text turn to Gemini Live.
+     *
+     * Used by lightweight voice-preview sessions where no
+     * microphone input is required.
+     */
+    fun sendText(
+        text: String
+    ) {
+
+        if (
+            !setupCompleted ||
+            text.isBlank()
+        ) {
+            return
+        }
+
+        val message =
+            JSONObject().apply {
+
+                put(
+                    "clientContent",
+                    JSONObject().apply {
+
+                        put(
+                            "turns",
+                            JSONArray().put(
+                                JSONObject().apply {
+
+                                    put(
+                                        "role",
+                                        "user"
+                                    )
+
+                                    put(
+                                        "parts",
+                                        JSONArray().put(
+                                            JSONObject().apply {
+                                                put(
+                                                    "text",
+                                                    text
+                                                )
+                                            }
+                                        )
+                                    )
+                                }
+                            )
+                        )
+
+                        put(
+                            "turnComplete",
+                            true
+                        )
+                    }
+                )
+            }
+
+        webSocket?.send(
+            message.toString()
+        )
+    }
+
+    /**
      * Send one PCM audio chunk.
      *
      * Expected input:

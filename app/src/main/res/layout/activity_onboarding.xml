@@ -3,76 +3,106 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+
     android:background="@color/vj_bg_canvas"
+
     android:paddingStart="@dimen/vj_screen_horizontal"
     android:paddingEnd="@dimen/vj_screen_horizontal"
-    android:paddingTop="28dp"
-    android:paddingBottom="24dp">
+    android:paddingTop="22dp"
+    android:paddingBottom="20dp">
 
     <TextView
         android:id="@+id/onboardingStep"
+
         style="@style/VJTextCaption"
+
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="01 / 03"
+
+        android:text="01 / 06"
         android:textColor="@color/vj_cyan"
         android:textStyle="bold"
         android:letterSpacing="0.12"
+
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
     <TextView
         android:id="@+id/onboardingSkip"
+
         style="@style/VJTextCaption"
+
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
+
         android:text="SKIP"
         android:textColor="@color/vj_text_tertiary"
         android:textStyle="bold"
         android:letterSpacing="0.10"
+
+        android:gravity="center"
+
         android:clickable="true"
         android:focusable="true"
+
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <FrameLayout
         android:id="@+id/onboardingOrbStage"
+
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="20dp"
+
+        android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
+
         android:clipChildren="false"
         android:clipToPadding="false"
+
         app:layout_constraintTop_toBottomOf="@id/onboardingStep"
         app:layout_constraintBottom_toTopOf="@id/onboardingContent"
+
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <com.webwithroni.voicejarvis.orb.ParticleOrbView
             android:id="@+id/onboardingOrb"
+
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:contentDescription="JARVIS neural orb" />
+
+            android:contentDescription="JARVIS onboarding particle orb" />
 
     </FrameLayout>
 
     <LinearLayout
         android:id="@+id/onboardingContent"
+
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+
         android:orientation="vertical"
-        android:gravity="center_horizontal"
+
+        app:layout_constraintTop_toBottomOf="@id/onboardingOrbStage"
         app:layout_constraintBottom_toTopOf="@id/onboardingActions"
+
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <TextView
             android:id="@+id/onboardingEyebrow"
+
             style="@style/VJTextCaption"
+
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+
+            android:layout_gravity="center_horizontal"
+
             android:text="MEET JARVIS"
             android:textColor="@color/vj_violet"
             android:textStyle="bold"
@@ -80,43 +110,172 @@
 
         <TextView
             android:id="@+id/onboardingTitle"
+
             style="@style/VJTextHeading"
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+
+            android:layout_marginTop="7dp"
+
             android:gravity="center"
+
             android:text="A voice system built around you."
-            android:textSize="23sp"
+            android:textSize="24sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/onboardingBody"
+
             style="@style/VJTextSecondary"
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+
+            android:layout_marginTop="9dp"
+
             android:gravity="center"
-            android:text="Talk naturally, get useful answers, and let JARVIS help with the things you actually do."
-            android:lineSpacingExtra="4dp" />
+
+            android:lineSpacingExtra="3dp"
+
+            android:text="Talk naturally, get useful answers, and let JARVIS help with the things you actually do." />
+
+        <LinearLayout
+            android:id="@+id/voiceStudio"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical"
+            android:visibility="gone"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="10dp"
+                android:background="@drawable/vj_card_background">
+
+                <TextView
+                    android:id="@+id/voiceSelectedName"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Aoede"
+                    android:textColor="@color/vj_text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/voicePreviewButton"
+                    style="@style/VJButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="▶  PREVIEW"
+                    android:textAllCaps="false" />
+
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/voiceSearch"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="8dp"
+                android:hint="Search voices..."
+                android:singleLine="true"
+                android:textColor="@color/vj_text_primary"
+                android:textColorHint="@color/vj_text_tertiary"
+                android:background="@drawable/vj_card_background" />
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="8dp"
+                android:layout_weight="1"
+                android:scrollbars="vertical">
+
+                <LinearLayout
+                    android:id="@+id/voiceList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </ScrollView>
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/personalitySelectionSummary"
+
+            style="@style/VJTextCaption"
+
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_gravity="center_horizontal"
+
+            android:layout_marginTop="10dp"
+
+            android:text="Selected • The Best Assistant"
+
+            android:textColor="@color/vj_cyan"
+            android:textStyle="bold"
+
+            android:visibility="gone" />
+
+        <ScrollView
+            android:id="@+id/personalityScroll"
+
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+
+            android:layout_marginTop="10dp"
+
+            android:fillViewport="false"
+
+            android:scrollbars="vertical"
+
+            android:visibility="gone"
+
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/personalityList"
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:orientation="vertical" />
+
+        </ScrollView>
 
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/onboardingActions"
+
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+
         android:orientation="vertical"
+
         android:gravity="center_horizontal"
+
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <Button
             android:id="@+id/onboardingPrimary"
+
             style="@style/VJButton"
+
             android:layout_width="match_parent"
             android:layout_height="@dimen/vj_button_height"
+
             android:background="@drawable/vj_button_primary"
+
             android:text="Continue"
             android:textColor="@color/vj_bg_canvas"
             android:textStyle="bold"
@@ -124,12 +283,18 @@
 
         <TextView
             android:id="@+id/onboardingHint"
+
             style="@style/VJTextCaption"
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+
+            android:layout_marginTop="9dp"
+
             android:gravity="center"
-            android:text="You can change permissions and preferences later in Settings."
+
+            android:text="Your setup takes about a minute."
+
             android:textColor="@color/vj_text_tertiary" />
 
     </LinearLayout>
