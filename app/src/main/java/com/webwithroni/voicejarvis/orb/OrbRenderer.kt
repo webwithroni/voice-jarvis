@@ -692,10 +692,10 @@ class OrbRenderer(
                 0f
             } else {
                 (
-                    motion.breath * 0.55f +
-                        motion.pulse * 0.20f +
-                        stateEnergy * 0.55f +
-                        motion.fieldWarp * 0.35f
+                    motion.breath * 0.60f +
+                        motion.pulse * 0.28f +
+                        stateEnergy * 0.62f +
+                        motion.fieldWarp * 0.46f
                     )
                     .coerceIn(
                         0f,
@@ -765,7 +765,7 @@ class OrbRenderer(
                     (
                         1f +
                             radialNoise *
-                            0.045f *
+                            0.060f *
                             directionBias
                         )
 
@@ -1126,13 +1126,18 @@ class OrbRenderer(
 
         innerShellPaint.alpha =
             (
-                195f *
-                    motion.glowMultiplier
+                105f *
+                    motion.glowMultiplier *
+                    (
+                        0.82f +
+                            motion.audioEnergy * 0.38f +
+                            motion.pulse * 0.16f
+                    )
                 )
                 .toInt()
                 .coerceIn(
-                    60,
-                    230
+                    28,
+                    150
                 )
 
         canvas.drawCircle(
@@ -1142,8 +1147,199 @@ class OrbRenderer(
             innerShellPaint
         )
 
+        /*
+         * Secondary internal energy bloom.
+         *
+         * This keeps the core alive without turning it into
+         * an opaque colored disk.
+         */
+        if (!reducedMotion) {
+
+            val bloomRadius =
+                innerRadius *
+                    (
+                        0.52f +
+                            motion.audioEnergy * 0.10f +
+                            motion.pulse * 0.06f
+                    )
+
+            val bloomAlpha =
+                (
+                    72f *
+                        motion.glowMultiplier *
+                        (
+                            0.75f +
+                                motion.audioEnergy * 0.45f
+                        )
+                    )
+                    .toInt()
+                    .coerceIn(
+                        12,
+                        90
+                    )
+
+            innerShellPaint.shader =
+                RadialGradient(
+                    centerX -
+                        innerRadius * 0.08f,
+                    centerY -
+                        innerRadius * 0.10f,
+                    bloomRadius,
+                    highlightColor(
+                        color
+                    ),
+                    transparentColor(
+                        color
+                    ),
+                    Shader.TileMode.CLAMP
+                )
+
+            innerShellPaint.alpha =
+                bloomAlpha
+
+            canvas.drawCircle(
+                centerX,
+                centerY,
+                bloomRadius,
+                innerShellPaint
+            )
+        }
+
         innerShellPaint.shader =
             null
+
+        /*
+         * Internal particle field.
+         *
+         * Only a subset of particles enters the core so the
+         * center feels volumetric rather than filled.
+         */
+        if (!reducedMotion) {
+
+            val internalRadius =
+                innerRadius * 0.92f
+
+            val internalEnergy =
+                (
+                    0.22f +
+                        motion.audioEnergy * 0.72f +
+                        motion.pulse * 0.20f
+                )
+                .coerceIn(
+                    0.18f,
+                    1f
+                )
+
+            var index = 0
+
+            for (
+                particle in particles.particles()
+            ) {
+
+                if (
+                    particle.layer !=
+                        OrbParticleSystem.Layer.MICRO
+                ) {
+                    continue
+                }
+
+                /*
+                 * Deterministic filtering keeps the field stable.
+                 */
+                if (
+                    index % 3 != 0
+                ) {
+                    index++
+                    continue
+                }
+
+                val orbit =
+                    particle.orbitRadius *
+                        0.58f *
+                        innerRadius
+
+                val angle =
+                    particle.angle +
+                        particle.phase *
+                        0.14f
+
+                val x =
+                    centerX +
+                        kotlin.math.cos(angle) *
+                        orbit
+
+                val y =
+                    centerY +
+                        kotlin.math.sin(angle) *
+                        orbit *
+                        0.88f
+
+                val depth =
+                    particle.depth
+                        .coerceIn(
+                            0.15f,
+                            1f
+                        )
+
+                val size =
+                    (
+                        particle.size *
+                            0.72f *
+                            (
+                                0.55f +
+                                    depth * 0.55f
+                            )
+                        )
+                        .coerceIn(
+                            0.55f,
+                            2.4f
+                        )
+
+                val alpha =
+                    (
+                        100f *
+                            particle.alpha *
+                            internalEnergy *
+                            (
+                                0.45f +
+                                    depth * 0.55f
+                            )
+                        )
+                        .toInt()
+                        .coerceIn(
+                            8,
+                            120
+                        )
+
+                if (
+                    alpha <= 0
+                ) {
+                    index++
+                    continue
+                }
+
+                particlePaint.style =
+                    Paint.Style.FILL
+
+                particlePaint.color =
+                    particleColor(
+                        state,
+                        OrbParticleSystem.Layer.MICRO
+                    )
+
+                particlePaint.alpha =
+                    alpha
+
+                canvas.drawCircle(
+                    x,
+                    y,
+                    size,
+                    particlePaint
+                )
+
+                index++
+            }
+        }
 
         /*
          * Inner neural membrane.
