@@ -3,9 +3,12 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+
     android:background="@color/vj_bg_canvas"
+
     android:paddingStart="@dimen/vj_screen_horizontal"
     android:paddingEnd="@dimen/vj_screen_horizontal"
     android:paddingTop="24dp"
@@ -13,27 +16,32 @@
 
     <LinearLayout
         android:id="@+id/authBrand"
+
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+
         android:gravity="center_vertical"
         android:orientation="horizontal"
+
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <ImageView
-            android:id="@+id/authLogo"
             android:layout_width="30dp"
             android:layout_height="30dp"
+
             android:src="@drawable/ic_jarvis_logo"
             android:contentDescription="JARVIS" />
 
         <TextView
-            android:id="@+id/authBrandText"
             style="@style/VJTextTitle"
+
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+
             android:layout_marginStart="10dp"
+
             android:text="JARVIS"
             android:letterSpacing="0.18" />
 
@@ -41,72 +49,99 @@
 
     <TextView
         android:id="@+id/authEyebrow"
+
         style="@style/VJTextCaption"
+
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
+
+        android:layout_marginTop="28dp"
+
         android:text="PERSONAL VOICE INTELLIGENCE"
         android:textColor="@color/vj_cyan"
         android:textStyle="bold"
         android:letterSpacing="0.12"
+
         app:layout_constraintTop_toBottomOf="@id/authBrand"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <TextView
         android:id="@+id/authTitle"
+
         style="@style/VJTextDisplay"
+
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+
         android:layout_marginTop="8dp"
+
         android:gravity="center"
+
         android:text="Your voice.\nYour intelligence."
         android:textSize="30sp"
         android:textStyle="bold"
+
         app:layout_constraintTop_toBottomOf="@id/authEyebrow"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <TextView
         android:id="@+id/authSubtitle"
+
         style="@style/VJTextSecondary"
+
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+
         android:layout_marginTop="10dp"
+
         android:gravity="center"
-        android:text="Sign in once. Keep your JARVIS workspace synced."
-        android:lineSpacingExtra="3dp"
+
+        android:text="Sign in to your private JARVIS workspace."
+
         app:layout_constraintTop_toBottomOf="@id/authTitle"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <FrameLayout
         android:id="@+id/authOrbStage"
+
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="6dp"
+
+        android:layout_marginTop="4dp"
         android:layout_marginBottom="4dp"
+
         android:clipChildren="false"
         android:clipToPadding="false"
+
         app:layout_constraintTop_toBottomOf="@id/authSubtitle"
         app:layout_constraintBottom_toTopOf="@id/authActionArea"
+
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <com.webwithroni.voicejarvis.orb.ParticleOrbView
             android:id="@+id/authOrb"
+
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+
             android:contentDescription="JARVIS neural orb" />
 
         <TextView
             android:id="@+id/authOrbLabel"
+
             style="@style/VJTextCaption"
+
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+
             android:layout_gravity="center_horizontal|bottom"
             android:layout_marginBottom="14dp"
-            android:text="NEURAL CORE"
+
+            android:text="SECURE ACCESS"
             android:textColor="@color/vj_text_tertiary"
             android:letterSpacing="0.16" />
 
@@ -114,173 +149,185 @@
 
     <LinearLayout
         android:id="@+id/authActionArea"
+
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+
         android:orientation="vertical"
         android:gravity="center_horizontal"
+
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/phoneNumberLayout"
+            android:id="@+id/emailInputLayout"
+
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Phone number"
+
+            android:hint="Email"
+
             app:boxStrokeColor="@color/vj_cyan"
             app:hintTextColor="@color/vj_text_secondary">
 
             <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/phoneNumberInput"
+                android:id="@+id/emailInput"
+
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="phone"
+
+                android:inputType="textEmailAddress"
                 android:maxLines="1"
-                android:singleLine="true"
-                android:hint="+91 98765 43210" />
+                android:singleLine="true" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
-        <Button
-            android:id="@+id/sendOtpButton"
-            style="@style/VJButton"
-            android:layout_width="match_parent"
-            android:layout_height="@dimen/vj_button_height"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/vj_button_primary"
-            android:text="Continue with Phone"
-            android:textColor="@color/vj_bg_canvas"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:textAllCaps="false" />
-
-        <LinearLayout
-            android:id="@+id/otpSection"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone">
 
-            <TextView
-                android:id="@+id/otpPrompt"
-                style="@style/VJTextCaption"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:gravity="center"
-                android:text="Enter the 6-digit code sent to your phone."
-                android:textColor="@color/vj_text_tertiary" />
+            android:layout_marginTop="10dp">
 
             <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/otpInputLayout"
+                android:id="@+id/passwordInputLayout"
+
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:hint="Verification code"
+
+                android:hint="Password"
+
                 app:boxStrokeColor="@color/vj_cyan"
                 app:hintTextColor="@color/vj_text_secondary">
 
                 <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/otpInput"
+                    android:id="@+id/passwordInput"
+
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:maxLength="6"
+
+                    android:paddingEnd="70dp"
+
+                    android:inputType="textPassword"
                     android:maxLines="1"
-                    android:gravity="center"
-                    android:letterSpacing="0.18"
-                    android:textSize="20sp"
                     android:singleLine="true" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
-            <Button
-                android:id="@+id/verifyOtpButton"
-                style="@style/VJButton"
-                android:layout_width="match_parent"
-                android:layout_height="@dimen/vj_button_height"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/vj_button_primary"
-                android:text="Verify &amp; Continue"
-                android:textColor="@color/vj_bg_canvas"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textAllCaps="false" />
-
             <TextView
-                android:id="@+id/resendOtpButton"
+                android:id="@+id/passwordToggle"
+
                 style="@style/VJTextCaption"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginTop="8dp"
-                android:text="Resend code in 60s"
+
+                android:layout_width="60dp"
+                android:layout_height="48dp"
+
+                android:layout_gravity="end|center_vertical"
+
+                android:gravity="center"
+
+                android:text="SHOW"
                 android:textColor="@color/vj_cyan"
                 android:textStyle="bold"
+
                 android:clickable="true"
                 android:focusable="true" />
 
-        </LinearLayout>
+        </FrameLayout>
 
         <TextView
-            android:id="@+id/authOrText"
+            android:id="@+id/forgotPasswordButton"
+
             style="@style/VJTextCaption"
+
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="OR"
-            android:textColor="@color/vj_text_disabled"
-            android:letterSpacing="0.12" />
+            android:layout_height="48dp"
+
+            android:layout_gravity="end"
+
+            android:gravity="center"
+
+            android:text="Forgot password?"
+            android:textColor="@color/vj_cyan"
+            android:textStyle="bold"
+
+            android:clickable="true"
+            android:focusable="true" />
 
         <Button
-            android:id="@+id/googleSignInButton"
+            android:id="@+id/signInButton"
+
             style="@style/VJButton"
+
             android:layout_width="match_parent"
             android:layout_height="@dimen/vj_button_height"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/vj_button_secondary"
-            android:text="Continue with Google"
-            android:textColor="@color/vj_text_primary"
+
+            android:layout_marginTop="2dp"
+
+            android:background="@drawable/vj_button_primary"
+
+            android:text="SIGN IN"
+            android:textColor="@color/vj_bg_canvas"
             android:textSize="15sp"
             android:textStyle="bold"
             android:textAllCaps="false" />
 
         <ProgressBar
             android:id="@+id/authProgress"
+
             android:layout_width="28dp"
             android:layout_height="28dp"
+
             android:layout_marginTop="10dp"
+
             android:visibility="gone" />
 
         <TextView
             android:id="@+id/authStatusText"
+
             style="@style/VJTextCaption"
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+
             android:layout_marginTop="8dp"
+
             android:gravity="center"
-            android:text="Secure authentication powered by Firebase."
+
+            android:text="Secure access powered by Firebase."
             android:textColor="@color/vj_text_tertiary" />
 
         <TextView
             android:id="@+id/authSecurityText"
+
             style="@style/VJTextCaption"
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+
             android:layout_marginTop="6dp"
+
             android:gravity="center"
+
             android:text="Your conversations and preferences stay connected to your account."
             android:textColor="@color/vj_text_tertiary" />
 
         <TextView
             android:id="@+id/authLegalText"
+
             style="@style/VJTextCaption"
+
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+
             android:layout_marginTop="8dp"
+
             android:gravity="center"
+
             android:text="Privacy  •  Terms"
             android:textColor="@color/vj_text_disabled" />
 

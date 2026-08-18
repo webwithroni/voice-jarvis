@@ -2,29 +2,14 @@ package com.webwithroni.voicejarvis
 
 import android.app.Activity
 import android.content.Context
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
-import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.auth.PhoneAuthCredential
-import com.google.firebase.auth.PhoneAuthOptions
-import com.google.firebase.auth.PhoneAuthProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import com.google.android.gms.tasks.Task
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import java.security.MessageDigest
-import java.security.SecureRandom
-import android.util.Base64
-import java.util.concurrent.TimeUnit
 
 /**
  * Central authentication gateway for Voice Jarvis.
@@ -32,8 +17,6 @@ import java.util.concurrent.TimeUnit
  * Responsibilities:
  *
  * - Firebase authentication state
- * - Google / Credential Manager sign-in
- * - Anonymous -> Google account linking
  * - Sign-out
  *
  * FirebaseManager remains responsible for:
@@ -44,9 +27,6 @@ import java.util.concurrent.TimeUnit
  * - learning data
  */
 object AuthManager {
-
-    private const val GOOGLE_ID_TOKEN_TYPE =
-        GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 
     private const val PREFS_NAME =
         "voice_jarvis_auth"
@@ -60,14 +40,6 @@ object AuthManager {
 
     private val auth: FirebaseAuth by lazy {
         FirebaseAuth.getInstance()
-    }
-
-    private fun credentialManager(
-        context: Context
-    ): CredentialManager {
-        return CredentialManager.create(
-            context
-        )
     }
 
     fun currentUser():
@@ -109,277 +81,43 @@ object AuthManager {
             ?: false
     }
 
-    interface PhoneVerificationCallbacks {
-
-        fun onVerificationCompleted(
-            credential: PhoneAuthCredential
-        )
-
-        fun onCodeSent(
-            verificationId: String,
-            resendToken: PhoneAuthProvider.ForceResendingToken
-        )
-
-        fun onVerificationFailed(
-            error: FirebaseException
-        )
-
-        fun onCodeAutoRetrievalTimeOut(
-            verificationId: String
-        ) {
-        }
-    }
-
     /**
-     * Start Firebase Phone OTP verification.
+     * Sign in using Firebase Email + Password.
      *
-     * Firebase owns the SMS verification and app-verification flow.
-     * The Android Activity receives verification callbacks through the
-     * callback interface above.
+     * JARVIS intentionally exposes no account-creation flow.
+     * Accounts are provisioned outside the application.
      */
-    fun startPhoneVerification(
-        activity: Activity,
-        phoneNumber: String,
-        callbacks: PhoneVerificationCallbacks
-    ) {
-
-        startPhoneVerificationInternal(
-            activity = activity,
-            phoneNumber = phoneNumber,
-            callbacks = callbacks,
-            forceResendingToken = null
-        )
-    }
-
-    /**
-     * Resend the OTP using Firebase's resending token.
-     */
-    fun resendPhoneVerification(
-        activity: Activity,
-        phoneNumber: String,
-        resendToken: PhoneAuthProvider.ForceResendingToken,
-        callbacks: PhoneVerificationCallbacks
-    ) {
-
-        startPhoneVerificationInternal(
-            activity = activity,
-            phoneNumber = phoneNumber,
-            callbacks = callbacks,
-            forceResendingToken = resendToken
-        )
-    }
-
-    private fun startPhoneVerificationInternal(
-        activity: Activity,
-        phoneNumber: String,
-        callbacks: PhoneVerificationCallbacks,
-        forceResendingToken:
-            PhoneAuthProvider.ForceResendingToken?
-    ) {
-
-        val authCallbacks =
-            object :
-                PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-
-                override fun onVerificationCompleted(
-                    credential: PhoneAuthCredential
-                ) {
-                    callbacks.onVerificationCompleted(
-                        credential
-                    )
-                }
-
-                override fun onVerificationFailed(
-                    error: FirebaseException
-                ) {
-                    callbacks.onVerificationFailed(
-                        error
-                    )
-                }
-
-                override fun onCodeSent(
-                    verificationId: String,
-                    token:
-                        PhoneAuthProvider.ForceResendingToken
-                ) {
-                    callbacks.onCodeSent(
-                        verificationId,
-                        token
-                    )
-                }
-
-                override fun onCodeAutoRetrievalTimeOut(
-                    verificationId: String
-                ) {
-                    callbacks.onCodeAutoRetrievalTimeOut(
-                        verificationId
-                    )
-                }
-            }
-
-        try {
-
-            val builder =
-                PhoneAuthOptions
-                    .newBuilder(
-                        auth
-                    )
-                    .setPhoneNumber(
-                        phoneNumber
-                    )
-                    .setTimeout(
-                        60L,
-                        TimeUnit.SECONDS
-                    )
-                    .setActivity(
-                        activity
-                    )
-                    .setCallbacks(
-                        authCallbacks
-                    )
-
-            forceResendingToken?.let {
-                builder.setForceResendingToken(
-                    it
-                )
-            }
-
-            PhoneAuthProvider.verifyPhoneNumber(
-                builder.build()
-            )
-
-        } catch (
-            error: Throwable
-        ) {
-
-            if (
-                error is FirebaseException
-            ) {
-                callbacks.onVerificationFailed(
-                    error
-                )
-            } else {
-                callbacks.onVerificationFailed(
-                    FirebaseException(
-                        error.message
-                            ?: "Unable to start phone verification."
-                    )
-                )
-            }
-        }
-    }
-
-    /**
-     * Verify a manually entered Firebase SMS code.
-     */
-    suspend fun verifyPhoneCode(
-        verificationId: String,
-        verificationCode: String
+    suspend fun signInWithEmailPassword(
+        email: String,
+        password: String
     ): Result<FirebaseUser> {
 
         return try {
 
-            if (
-                verificationId.isBlank()
-            ) {
-                throw IllegalStateException(
-                    "Phone verification session is missing."
-                )
-            }
+            val normalizedEmail =
+                email.trim()
 
             if (
-                !verificationCode.matches(
-                    Regex("\\d{6}")
-                )
+                normalizedEmail.isBlank()
             ) {
                 throw IllegalArgumentException(
-                    "Enter the 6-digit verification code."
+                    "Email is required."
                 )
             }
 
-            val credential =
-                PhoneAuthProvider.getCredential(
-                    verificationId,
-                    verificationCode
-                )
-
-            signInWithPhoneCredential(
-                credential
-            )
-
-        } catch (
-            cancellation:
-            CancellationException
-        ) {
-
-            throw cancellation
-
-        } catch (
-            error: Throwable
-        ) {
-
-            Result.failure(
-                error
-            )
-        }
-    }
-
-    /**
-     * Complete Firebase authentication from an already-created
-     * PhoneAuthCredential.
-     *
-     * Anonymous identities are linked when present so an existing UID
-     * is preserved instead of creating an unnecessary second identity.
-     */
-    suspend fun signInWithPhoneCredential(
-        credential: PhoneAuthCredential
-    ): Result<FirebaseUser> {
-
-        return try {
-
-            val existingUser =
-                auth.currentUser
-
             if (
-                existingUser != null &&
-                existingUser.isAnonymous
+                password.isBlank()
             ) {
-
-                try {
-
-                    val linked =
-                        existingUser
-                            .linkWithCredential(
-                                credential
-                            )
-                            .awaitFirebaseUser()
-
-                    return Result.success(
-                        linked
-                    )
-
-                } catch (
-                    collision:
-                    com.google.firebase.auth.FirebaseAuthUserCollisionException
-                ) {
-
-                    val signedIn =
-                        auth
-                            .signInWithCredential(
-                                credential
-                            )
-                            .awaitFirebaseUser()
-
-                    return Result.success(
-                        signedIn
-                    )
-                }
+                throw IllegalArgumentException(
+                    "Password is required."
+                )
             }
 
             val signedIn =
                 auth
-                    .signInWithCredential(
-                        credential
+                    .signInWithEmailAndPassword(
+                        normalizedEmail,
+                        password
                     )
                     .awaitFirebaseUser()
 
@@ -405,93 +143,33 @@ object AuthManager {
     }
 
     /**
-     * Start Google authentication through Android Credential Manager.
-     *
-     * The first request prefers accounts already authorized for the app.
-     * If none are available, the request is retried allowing other
-     * Google accounts on the device.
-     *
-     * When the current Firebase user is anonymous, the Google credential
-     * is linked to preserve the existing Firebase UID whenever possible.
+     * Send Firebase password-reset email.
      */
-    suspend fun signInWithGoogle(
-        activity: Activity
-    ): Result<FirebaseUser> {
+    suspend fun sendPasswordResetEmail(
+        email: String
+    ): Result<Unit> {
 
         return try {
 
-            /*
-             * This screen has an explicit "Continue with Google" button.
-             *
-             * Use Google's dedicated Sign-in-with-Google Credential Manager
-             * flow directly. This flow is specifically intended for cases
-             * where an existing Google account requires reauthentication.
-             */
-            val idToken =
-                requestExplicitGoogleIdToken(
-                    activity
-                )
-
-            val googleCredential =
-                GoogleAuthProvider.getCredential(
-                    idToken,
-                    null
-                )
-
-            val existingUser =
-                auth.currentUser
+            val normalizedEmail =
+                email.trim()
 
             if (
-                existingUser != null &&
-                existingUser.isAnonymous
+                normalizedEmail.isBlank()
             ) {
-
-                try {
-
-                    val linked =
-                        existingUser
-                            .linkWithCredential(
-                                googleCredential
-                            )
-                            .awaitFirebaseUser()
-
-                    return Result.success(
-                        linked
-                    )
-
-                } catch (
-                    collision:
-                    com.google.firebase.auth.FirebaseAuthUserCollisionException
-                ) {
-
-                    /*
-                     * The Google account already has a Firebase identity.
-                     *
-                     * Sign in to that existing Firebase identity instead
-                     * of creating a second account.
-                     */
-                    val signedIn =
-                        auth
-                            .signInWithCredential(
-                                googleCredential
-                            )
-                            .awaitFirebaseUser()
-
-                    return Result.success(
-                        signedIn
-                    )
-                }
+                throw IllegalArgumentException(
+                    "Email is required."
+                )
             }
 
-            val signedIn =
-                auth
-                    .signInWithCredential(
-                        googleCredential
-                    )
-                    .awaitFirebaseUser()
+            auth
+                .sendPasswordResetEmail(
+                    normalizedEmail
+                )
+                .await()
 
             Result.success(
-                signedIn
+                Unit
             )
 
         } catch (
@@ -512,8 +190,7 @@ object AuthManager {
     }
 
     /**
-     * Sign out from Firebase and clear the Credential Manager state so
-     * a later sign-in can deliberately choose an account again.
+     * Sign out from Firebase.
      */
     suspend fun signOut(
         context: Context
@@ -522,12 +199,6 @@ object AuthManager {
         return try {
 
             auth.signOut()
-
-            credentialManager(
-                context
-            ).clearCredentialState(
-                androidx.credentials.ClearCredentialStateRequest()
-            )
 
             Result.success(
                 Unit

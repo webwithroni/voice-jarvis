@@ -1,8 +1,8 @@
 package com.webwithroni.voicejarvis
 
+import android.content.Intent
 import android.os.Bundle
-import android.os.CountDownTimer
-import android.text.InputFilter
+import android.text.InputType
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -11,63 +11,40 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.google.firebase.FirebaseException
-import com.google.firebase.auth.FirebaseUser
-import com.google.firebase.auth.PhoneAuthCredential
-import com.google.firebase.auth.PhoneAuthProvider
-import com.webwithroni.voicejarvis.orb.ParticleOrbView
 import com.webwithroni.voicejarvis.orb.OrbActivity
 import com.webwithroni.voicejarvis.orb.OrbState
+import com.webwithroni.voicejarvis.orb.ParticleOrbView
 import kotlinx.coroutines.launch
 
 /**
  * JARVIS authentication surface.
  *
- * Primary authentication:
- * - Firebase Phone OTP
- *
- * Secondary authentication:
- * - Google
- *
- * No anonymous user is created here.
+ * Authentication policy:
+ * - Firebase Email + Password
+ * - Forgot password
+ * - No signup
+ * - No phone authentication
+ * - No Google authentication
  */
 class AuthActivity : AppCompatActivity() {
 
     private lateinit var orb: ParticleOrbView
 
-    private lateinit var phoneInput: EditText
-    private lateinit var sendOtpButton: Button
+    private lateinit var emailInput: EditText
+    private lateinit var passwordInput: EditText
+    private lateinit var signInButton: Button
+    private lateinit var forgotPasswordButton: TextView
+    private lateinit var passwordToggle: TextView
 
-    private lateinit var otpSection: View
-    private lateinit var otpInput: EditText
-    private lateinit var verifyOtpButton: Button
-    private lateinit var resendOtpButton: TextView
-
-    private lateinit var googleSignInButton: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var statusText: TextView
 
-    private var verificationId: String? = null
-    private var resendToken:
-        PhoneAuthProvider.ForceResendingToken? = null
+    private var authenticationInProgress = false
 
-    private var normalizedPhoneNumber: String? = null
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
-    private var resendTimer: CountDownTimer? = null
-
-    private var authenticationInProgress =
-        false
-
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
-        super.onCreate(
-            savedInstanceState
-        )
-
-        AuthManager.initialize(
-            this
-        )
+        AuthManager.initialize(this)
 
         if (
             AuthManager.isSignedIn() &&
@@ -77,93 +54,37 @@ class AuthActivity : AppCompatActivity() {
             return
         }
 
-        setContentView(
-            R.layout.activity_auth
-        )
+        setContentView(R.layout.activity_auth)
 
         bindViews()
         configureOrb()
         configureListeners()
-
-        if (
-            savedInstanceState != null
-        ) {
-            verificationId =
-                savedInstanceState.getString(
-                    STATE_VERIFICATION_ID
-                )
-
-            normalizedPhoneNumber =
-                savedInstanceState.getString(
-                    STATE_PHONE_NUMBER
-                )
-
-            if (
-                verificationId != null
-            ) {
-                showOtpStage()
-            }
-        }
     }
 
     private fun bindViews() {
 
-        orb =
-            findViewById(
-                R.id.authOrb
-            )
+        orb = findViewById(R.id.authOrb)
 
-        phoneInput =
-            findViewById(
-                R.id.phoneNumberInput
-            )
+        emailInput =
+            findViewById(R.id.emailInput)
 
-        sendOtpButton =
-            findViewById(
-                R.id.sendOtpButton
-            )
+        passwordInput =
+            findViewById(R.id.passwordInput)
 
-        otpSection =
-            findViewById(
-                R.id.otpSection
-            )
+        signInButton =
+            findViewById(R.id.signInButton)
 
-        otpInput =
-            findViewById(
-                R.id.otpInput
-            )
+        forgotPasswordButton =
+            findViewById(R.id.forgotPasswordButton)
 
-        verifyOtpButton =
-            findViewById(
-                R.id.verifyOtpButton
-            )
-
-        resendOtpButton =
-            findViewById(
-                R.id.resendOtpButton
-            )
-
-        googleSignInButton =
-            findViewById(
-                R.id.googleSignInButton
-            )
+        passwordToggle =
+            findViewById(R.id.passwordToggle)
 
         progressBar =
-            findViewById(
-                R.id.authProgress
-            )
+            findViewById(R.id.authProgress)
 
         statusText =
-            findViewById(
-                R.id.authStatusText
-            )
-
-        otpInput.filters =
-            arrayOf(
-                InputFilter.LengthFilter(
-                    6
-                )
-            )
+            findViewById(R.id.authStatusText)
     }
 
     private fun configureOrb() {
@@ -176,411 +97,165 @@ class AuthActivity : AppCompatActivity() {
             OrbActivity.NONE
         )
 
-        orb.setContentDescription(
+        orb.contentDescription =
             "JARVIS neural orb"
-        )
     }
 
     private fun configureListeners() {
 
-        sendOtpButton.setOnClickListener {
-            sendOtp()
+        signInButton.setOnClickListener {
+            signIn()
         }
 
-        verifyOtpButton.setOnClickListener {
-            verifyOtp()
+        forgotPasswordButton.setOnClickListener {
+            openPasswordReset()
         }
 
-        resendOtpButton.setOnClickListener {
-            resendOtp()
-        }
-
-        googleSignInButton.setOnClickListener {
-            beginGoogleSignIn()
+        passwordToggle.setOnClickListener {
+            togglePasswordVisibility()
         }
     }
 
-    private fun sendOtp() {
+    private fun signIn() {
 
-        val phoneNumber =
-            normalizePhoneNumber(
-                phoneInput.text
-                    .toString()
-            )
-
-        if (
-            phoneNumber == null
-        ) {
-
-            statusText.text =
-                "Enter a valid phone number."
-
-            phoneInput.requestFocus()
-
+        if (authenticationInProgress) {
             return
         }
 
-        normalizedPhoneNumber =
-            phoneNumber
+        val email =
+            emailInput.text
+                .toString()
+                .trim()
 
-        setAuthenticationLoading(
-            true
-        )
+        val password =
+            passwordInput.text
+                .toString()
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+
+            statusText.text =
+                "Enter a valid email address."
+
+            emailInput.requestFocus()
+            return
+        }
+
+        if (password.length < 6) {
+
+            statusText.text =
+                "Enter your password."
+
+            passwordInput.requestFocus()
+            return
+        }
+
+        authenticationInProgress = true
+
+        setLoading(true)
 
         statusText.text =
-            "Sending verification code…"
+            "Signing in securely…"
 
         orb.setState(
             OrbState.THINKING
         )
 
-        AuthManager.startPhoneVerification(
-            activity = this,
-            phoneNumber = phoneNumber,
-            callbacks =
-                phoneVerificationCallbacks
-        )
-    }
+        lifecycleScope.launch {
 
-    private val phoneVerificationCallbacks =
-        object :
-            AuthManager.PhoneVerificationCallbacks {
+            val result =
+                AuthManager.signInWithEmailPassword(
+                    email = email,
+                    password = password
+                )
 
-            override fun onVerificationCompleted(
-                credential: PhoneAuthCredential
-            ) {
+            result.fold(
 
-                runOnUiThread {
+                onSuccess = {
+                    authenticationInProgress = false
 
-                    statusText.text =
-                        "Phone number verified automatically."
+                    setLoading(false)
 
                     orb.setState(
                         OrbState.SPEAKING
                     )
-                }
-
-                completePhoneCredential(
-                    credential
-                )
-            }
-
-            override fun onCodeSent(
-                verificationId: String,
-                resendToken:
-                    PhoneAuthProvider.ForceResendingToken
-            ) {
-
-                runOnUiThread {
-
-                    this@AuthActivity
-                        .verificationId =
-                        verificationId
-
-                    this@AuthActivity
-                        .resendToken =
-                        resendToken
-
-                    setAuthenticationLoading(
-                        false
-                    )
-
-                    showOtpStage()
 
                     statusText.text =
-                        "Verification code sent."
+                        "Access confirmed."
 
-                    otpInput.requestFocus()
+                    openPostAuthDestination()
+                },
 
-                    startResendTimer()
-                }
-            }
+                onFailure = { error ->
 
-            override fun onVerificationFailed(
-                error: FirebaseException
-            ) {
+                    authenticationInProgress = false
 
-                runOnUiThread {
-
-                    setAuthenticationLoading(
-                        false
-                    )
+                    setLoading(false)
 
                     orb.setState(
                         OrbState.ERROR
                     )
 
                     statusText.text =
-                        friendlyPhoneError(
-                            error
-                        )
+                        friendlyAuthError(error)
 
-                    Toast.makeText(
-                        this@AuthActivity,
-                        error.message
-                            ?: "Phone verification failed.",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    passwordInput.requestFocus()
+                    passwordInput.selectAll()
                 }
+            )
+        }
+    }
+
+    private fun togglePasswordVisibility() {
+
+        val selection =
+            passwordInput.selectionStart
+
+        val showingPlainText =
+            passwordInput.inputType ==
+                (
+                    InputType.TYPE_CLASS_TEXT or
+                        InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                    )
+
+        passwordInput.inputType =
+            if (showingPlainText) {
+
+                InputType.TYPE_CLASS_TEXT or
+                    InputType.TYPE_TEXT_VARIATION_PASSWORD
+
+            } else {
+
+                InputType.TYPE_CLASS_TEXT or
+                    InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
             }
 
-            override fun onCodeAutoRetrievalTimeOut(
-                verificationId: String
-            ) {
+        passwordInput.setSelection(
+            selection.coerceAtLeast(0)
+                .coerceAtMost(passwordInput.text.length)
+        )
 
-                runOnUiThread {
-
-                    this@AuthActivity
-                        .verificationId =
-                        verificationId
-
-                    setAuthenticationLoading(
-                        false
-                    )
-
-                    statusText.text =
-                        "Enter the 6-digit code from SMS."
-                }
+        passwordToggle.text =
+            if (showingPlainText) {
+                "SHOW"
+            } else {
+                "HIDE"
             }
-        }
-
-    private fun verifyOtp() {
-
-        val id =
-            verificationId
-
-        if (
-            id.isNullOrBlank()
-        ) {
-
-            statusText.text =
-                "Request a new verification code."
-
-            return
-        }
-
-        val code =
-            otpInput.text
-                .toString()
-                .trim()
-
-        if (
-            !code.matches(
-                Regex("\\d{6}")
-            )
-        ) {
-
-            statusText.text =
-                "Enter the 6-digit verification code."
-
-            otpInput.requestFocus()
-
-            return
-        }
-
-        setAuthenticationLoading(
-            true
-        )
-
-        statusText.text =
-            "Verifying your code…"
-
-        orb.setState(
-            OrbState.THINKING
-        )
-
-        lifecycleScope.launch {
-
-            val result =
-                AuthManager.verifyPhoneCode(
-                    verificationId = id,
-                    verificationCode = code
-                )
-
-            result.fold(
-                onSuccess = {
-                    onAuthenticationSuccess(
-                        it
-                    )
-                },
-                onFailure = {
-                    onAuthenticationFailure(
-                        it
-                    )
-                }
-            )
-        }
     }
 
-    private fun resendOtp() {
-
-        val phone =
-            normalizedPhoneNumber
-
-        val token =
-            resendToken
-
-        if (
-            phone.isNullOrBlank() ||
-            token == null
-        ) {
-
-            statusText.text =
-                "Wait for the current verification request."
-            return
-        }
-
-        setAuthenticationLoading(
-            true
-        )
-
-        statusText.text =
-            "Sending a new verification code…"
-
-        AuthManager.resendPhoneVerification(
-            activity = this,
-            phoneNumber = phone,
-            resendToken = token,
-            callbacks =
-                phoneVerificationCallbacks
-        )
-    }
-
-    private fun completePhoneCredential(
-        credential: PhoneAuthCredential
-    ) {
-
-        if (
-            authenticationInProgress
-        ) {
-            return
-        }
-
-        authenticationInProgress =
-            true
-
-        lifecycleScope.launch {
-
-            val result =
-                AuthManager.signInWithPhoneCredential(
-                    credential
-                )
-
-            result.fold(
-                onSuccess = {
-                    onAuthenticationSuccess(
-                        it
-                    )
-                },
-                onFailure = {
-                    authenticationInProgress =
-                        false
-
-                    onAuthenticationFailure(
-                        it
-                    )
-                }
-            )
-        }
-    }
-
-    private fun beginGoogleSignIn() {
-
-        setAuthenticationLoading(
-            true
-        )
-
-        statusText.text =
-            "Opening secure Google sign-in…"
-
-        orb.setState(
-            OrbState.THINKING
-        )
-
-        lifecycleScope.launch {
-
-            val result =
-                AuthManager.signInWithGoogle(
-                    this@AuthActivity
-                )
-
-            result.fold(
-                onSuccess = {
-                    onAuthenticationSuccess(
-                        it
-                    )
-                },
-                onFailure = {
-                    onAuthenticationFailure(
-                        it
-                    )
-                }
-            )
-        }
-    }
-
-    private fun onAuthenticationSuccess(
-        user: FirebaseUser
-    ) {
-
-        authenticationInProgress =
-            false
-
-        setAuthenticationLoading(
-            false
-        )
-
-        orb.setState(
-            OrbState.LISTENING
-        )
-
-        statusText.text =
-            "Welcome ${user.displayName ?: user.email ?: "back"}."
-
-        openPostAuthDestination()
-    }
-
-    private fun onAuthenticationFailure(
-        error: Throwable
-    ) {
-
-        authenticationInProgress =
-            false
-
-        setAuthenticationLoading(
-            false
-        )
-
-        orb.setState(
-            OrbState.ERROR
-        )
-
-        statusText.text =
-            error.message
-                ?: "Authentication was not completed."
-
-        Toast.makeText(
-            this,
-            error.message
-                ?: "Authentication failed.",
-            Toast.LENGTH_LONG
-        ).show()
-    }
-
-    private fun setAuthenticationLoading(
+    private fun setLoading(
         loading: Boolean
     ) {
 
-        sendOtpButton.isEnabled =
+        emailInput.isEnabled =
             !loading
 
-        verifyOtpButton.isEnabled =
+        passwordInput.isEnabled =
             !loading
 
-        googleSignInButton.isEnabled =
+        signInButton.isEnabled =
             !loading
 
-        phoneInput.isEnabled =
+        forgotPasswordButton.isEnabled =
             !loading
 
         progressBar.visibility =
@@ -591,131 +266,61 @@ class AuthActivity : AppCompatActivity() {
             }
     }
 
-    private fun showOtpStage() {
-
-        otpSection.visibility =
-            View.VISIBLE
-
-        phoneInput.isEnabled =
-            false
-
-        sendOtpButton.visibility =
-            View.GONE
-
-        googleSignInButton.visibility =
-            View.GONE
-
-        otpInput.text?.clear()
-
-        otpInput.requestFocus()
-    }
-
-    private fun startResendTimer() {
-
-        resendTimer?.cancel()
-
-        resendOtpButton.isEnabled =
-            false
-
-        resendOtpButton.text =
-            "Resend code in 60s"
-
-        resendTimer =
-            object :
-                CountDownTimer(
-                    60_000L,
-                    1_000L
-                ) {
-
-                override fun onTick(
-                    millisUntilFinished: Long
-                ) {
-
-                    resendOtpButton.text =
-                        "Resend code in ${millisUntilFinished / 1000}s"
-                }
-
-                override fun onFinish() {
-
-                    resendOtpButton.isEnabled =
-                        true
-
-                    resendOtpButton.text =
-                        "Resend code"
-                }
-            }.start()
-    }
-
-    private fun normalizePhoneNumber(
-        input: String
-    ): String? {
-
-        val normalized =
-            input
-                .trim()
-                .replace(
-                    Regex("[\\s()-]"),
-                    ""
-                )
-
-        return when {
-
-            normalized.matches(
-                Regex("\\d{10}")
-            ) -> {
-                "+91$normalized"
-            }
-
-            normalized.matches(
-                Regex("\\+\\d{10,15}")
-            ) -> {
-                normalized
-            }
-
-            normalized.startsWith(
-                "0091"
-            ) &&
-                normalized.length == 14 -> {
-                "+${normalized.drop(2)}"
-            }
-
-            else -> {
-                null
-            }
-        }
-    }
-
-    private fun friendlyPhoneError(
-        error: FirebaseException
+    private fun friendlyAuthError(
+        error: Throwable
     ): String {
 
         val message =
             error.message
-                ?: "Phone verification failed."
+                ?: return "Sign-in could not be completed."
 
         return when {
 
             message.contains(
-                "quota",
+                "invalid-credential",
+                ignoreCase = true
+            ) ||
+            message.contains(
+                "wrong-password",
+                ignoreCase = true
+            ) ||
+            message.contains(
+                "user-not-found",
                 ignoreCase = true
             ) ->
-                "SMS verification limit reached. Please try again later."
+                "Email or password is incorrect."
 
             message.contains(
-                "invalid",
+                "too-many-requests",
                 ignoreCase = true
             ) ->
-                "That phone number is not valid."
+                "Too many attempts. Please try again later."
 
             message.contains(
-                "too-many",
+                "network",
                 ignoreCase = true
             ) ->
-                "Too many attempts. Please wait before trying again."
+                "Network connection unavailable."
+
+            message.contains(
+                "disabled",
+                ignoreCase = true
+            ) ->
+                "This JARVIS account is disabled."
 
             else ->
                 message
         }
+    }
+
+    private fun openPasswordReset() {
+
+        startActivity(
+            Intent(
+                this,
+                ResetPasswordActivity::class.java
+            )
+        )
     }
 
     private fun openPostAuthDestination() {
@@ -730,51 +335,21 @@ class AuthActivity : AppCompatActivity() {
             }
 
         startActivity(
-            android.content.Intent(
+            Intent(
                 this,
                 destination
             ).apply {
                 flags =
-                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                        android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
         )
 
         finish()
     }
 
-    override fun onSaveInstanceState(
-        outState: Bundle
-    ) {
-
-        outState.putString(
-            STATE_VERIFICATION_ID,
-            verificationId
-        )
-
-        outState.putString(
-            STATE_PHONE_NUMBER,
-            normalizedPhoneNumber
-        )
-
-        super.onSaveInstanceState(
-            outState
-        )
-    }
-
     override fun onDestroy() {
-
-        resendTimer?.cancel()
-
+        authenticationInProgress = false
         super.onDestroy()
-    }
-
-    companion object {
-
-        private const val STATE_VERIFICATION_ID =
-            "phone_verification_id"
-
-        private const val STATE_PHONE_NUMBER =
-            "phone_number"
     }
 }
