@@ -38,6 +38,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     private lateinit var statusText: TextView
     private lateinit var stateLabel: TextView
     private lateinit var microcopy: TextView
+    private lateinit var voiceStateGroup: View
     private lateinit var muteIcon: ImageView
     private lateinit var muteLabel: TextView
     private lateinit var orb: ParticleOrbView
@@ -181,6 +182,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         statusText = findViewById(R.id.statusText)
         stateLabel = findViewById(R.id.stateLabel)
         microcopy = findViewById(R.id.microcopy)
+        voiceStateGroup = findViewById(R.id.voiceStateGroup)
         muteIcon = findViewById(R.id.muteIcon)
         muteLabel = findViewById(R.id.muteLabel)
         orb = findViewById(R.id.orbView)
@@ -702,6 +704,17 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
             sub
 
         /*
+         * Conversation mode owns the lower state surface while
+         * a conversation is visible.
+         *
+         * Do not allow state updates to recreate the idle
+         * "LISTENING / I'm listening" block underneath it.
+         */
+        if (conversationCard.visibility == View.VISIBLE) {
+            voiceStateGroup.visibility = View.GONE
+        }
+
+        /*
          * Home V2 system metadata.
          *
          * Header communicates the runtime connection role.
@@ -886,9 +899,34 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         }
     }
 
+    /**
+     * Home V3 conversation mode.
+     *
+     * Conversation content replaces the idle state/microcopy
+     * region instead of drawing over it.
+     */
+    private fun setConversationMode(enabled: Boolean) {
+
+        /*
+         * Conversation mode owns the space between the Orb and
+         * the interaction controls.
+         *
+         * The latest conversation remains visible after a turn
+         * completes so the Home surface feels continuous instead
+         * of abruptly clearing itself.
+         */
+        voiceStateGroup.visibility =
+            if (enabled) View.GONE else View.VISIBLE
+
+        conversationCard.visibility =
+            if (enabled) View.VISIBLE else View.GONE
+    }
+
     private fun showConversation(userText: String?, jarvisText: String?) {
         if (userText.isNullOrBlank() && jarvisText.isNullOrBlank()) return
-        conversationCard.visibility = View.VISIBLE
+
+        setConversationMode(true)
+
         val now = timeFormat.format(Date())
         if (!userText.isNullOrBlank()) {
             lastUserTextCache = userText
