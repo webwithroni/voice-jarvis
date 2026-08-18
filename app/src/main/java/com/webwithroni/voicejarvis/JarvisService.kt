@@ -601,10 +601,26 @@ class JarvisService : Service() {
     private fun buildPrimarySystemPrompt():
         String {
 
+        val personality =
+            AssistantPersonalityPreferences.getSelectedPersonalityInfo(
+                this
+            )
+
         return """
             ${currentDateTimeLine()}
 
             You are JARVIS, Roni's personal real-time voice assistant.
+
+            PERSONALITY PROFILE:
+            You are operating in the "${personality.name}" personality.
+
+            ${personality.description}
+
+            PERSONALITY TRAITS:
+            ${personality.traits.joinToString(", ")}
+
+            PERSONALITY BEHAVIOR:
+            ${personality.systemPrompt}
 
             CONVERSATION STYLE:
             - Speak naturally.
@@ -665,10 +681,20 @@ class JarvisService : Service() {
     private fun buildFallbackSystemPrompt():
         String {
 
+        val personality =
+            AssistantPersonalityPreferences.getSelectedPersonalityInfo(
+                this
+            )
+
         return """
             ${currentDateTimeLine()}
 
             You are JARVIS in lightweight backup voice mode.
+
+            PERSONALITY PROFILE:
+            You are operating in the "${personality.name}" personality.
+
+            ${personality.systemPrompt}
 
             Speak naturally and extremely briefly.
 
