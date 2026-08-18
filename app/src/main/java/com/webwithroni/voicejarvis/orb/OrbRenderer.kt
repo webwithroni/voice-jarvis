@@ -1032,13 +1032,13 @@ class OrbRenderer(
 
         shellPaint.alpha =
             (
-                95f *
+                62f *
                     motion.glowMultiplier
                 )
                 .toInt()
                 .coerceIn(
-                    25,
-                    170
+                    18,
+                    110
                 )
 
         canvas.drawCircle(
@@ -1156,18 +1156,18 @@ class OrbRenderer(
 
         innerShellPaint.alpha =
             (
-                72f *
+                48f *
                     motion.glowMultiplier *
                     (
-                        0.82f +
-                            motion.audioEnergy * 0.38f +
-                            motion.pulse * 0.16f
+                        0.78f +
+                            motion.audioEnergy * 0.42f +
+                            motion.pulse * 0.18f
                     )
                 )
                 .toInt()
                 .coerceIn(
-                    28,
-                    150
+                    18,
+                    105
                 )
 
         canvas.drawCircle(
@@ -1188,14 +1188,14 @@ class OrbRenderer(
             val bloomRadius =
                 innerRadius *
                     (
-                        0.46f +
-                            motion.audioEnergy * 0.09f +
-                            motion.pulse * 0.05f
+                        0.40f +
+                            motion.audioEnergy * 0.08f +
+                            motion.pulse * 0.045f
                     )
 
             val bloomAlpha =
                 (
-                    42f *
+                    30f *
                         motion.glowMultiplier *
                         (
                             0.75f +
@@ -1327,7 +1327,7 @@ class OrbRenderer(
 
                 val alpha =
                     (
-                        100f *
+                        78f *
                             particle.alpha *
                             internalEnergy *
                             (
@@ -1506,11 +1506,11 @@ class OrbRenderer(
 
         coreWispPaint.alpha =
             (
-                34f *
+                46f *
                     motion.glowMultiplier *
                     (
-                        0.65f +
-                            stateEnergy * 0.55f
+                        0.62f +
+                            stateEnergy * 0.58f
                         )
                 )
                 .toInt()
@@ -1556,11 +1556,11 @@ class OrbRenderer(
 
         coreWispPaint.alpha =
             (
-                27f *
+                34f *
                     motion.glowMultiplier *
                     (
-                        0.65f +
-                            stateEnergy * 0.50f
+                        0.62f +
+                            stateEnergy * 0.52f
                         )
                 )
                 .toInt()
@@ -1595,11 +1595,11 @@ class OrbRenderer(
 
         coreWispPaint.alpha =
             (
-                21f *
+                27f *
                     motion.glowMultiplier *
                     (
-                        0.65f +
-                            stateEnergy * 0.45f
+                        0.62f +
+                            stateEnergy * 0.48f
                         )
                 )
                 .toInt()
