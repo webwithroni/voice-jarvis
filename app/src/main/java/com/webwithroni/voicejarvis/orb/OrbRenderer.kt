@@ -56,6 +56,15 @@ class OrbRenderer(
         Paint(Paint.ANTI_ALIAS_FLAG)
 
     /**
+     * Fine internal energy-current paint.
+     *
+     * Used for subtle neural-core wisps without introducing
+     * another heavy particle/path system.
+     */
+    private val coreWispPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG)
+
+    /**
      * Reusable paths for the deformable neural membrane.
      *
      * Reusing these objects avoids allocating a new Path every frame.
@@ -383,6 +392,27 @@ class OrbRenderer(
          * ------------------------------------------------------
          */
         drawInnerShell(
+            canvas =
+                canvas,
+            centerX =
+                centerX,
+            centerY =
+                centerY,
+            radius =
+                visualRadius,
+            motion =
+                motion
+        )
+
+        /*
+         * ------------------------------------------------------
+         * 7. NEURAL CORE CURRENTS
+         * ------------------------------------------------------
+         *
+         * Fine internal energy movement prevents the core from
+         * reading as a flat colored disk.
+         */
+        drawNeuralCore(
             canvas =
                 canvas,
             centerX =
@@ -1126,7 +1156,7 @@ class OrbRenderer(
 
         innerShellPaint.alpha =
             (
-                105f *
+                72f *
                     motion.glowMultiplier *
                     (
                         0.82f +
@@ -1158,14 +1188,14 @@ class OrbRenderer(
             val bloomRadius =
                 innerRadius *
                     (
-                        0.52f +
-                            motion.audioEnergy * 0.10f +
-                            motion.pulse * 0.06f
+                        0.46f +
+                            motion.audioEnergy * 0.09f +
+                            motion.pulse * 0.05f
                     )
 
             val bloomAlpha =
                 (
-                    72f *
+                    42f *
                         motion.glowMultiplier *
                         (
                             0.75f +
@@ -1398,6 +1428,201 @@ class OrbRenderer(
             innerMembranePath,
             ringPaint
         )
+    }
+
+    /**
+     * Render three restrained internal energy currents.
+     *
+     * These are intentionally thin and translucent. The goal is
+     * to make the core feel volumetric and alive without turning
+     * it into a solid glowing disk.
+     */
+    private fun drawNeuralCore(
+        canvas: Canvas,
+        centerX: Float,
+        centerY: Float,
+        radius: Float,
+        motion: OrbMotionController.Snapshot
+    ) {
+
+        if (reducedMotion) {
+            return
+        }
+
+        val color =
+            stateColor(
+                state
+            )
+
+        val stateEnergy =
+            when (state) {
+
+                OrbState.THINKING ->
+                    1.00f
+
+                OrbState.HEARING,
+                OrbState.SPEAKING ->
+                    motion.audioEnergy
+
+                OrbState.ERROR ->
+                    motion.errorProgress
+
+                else ->
+                    0.18f
+            }
+            .coerceIn(
+                0.12f,
+                1f
+            )
+
+        val coreRadius =
+            radius *
+                motion.innerCoreScale *
+                0.92f
+
+        val movement =
+            motion.breath * 55f +
+                motion.pulse * 35f +
+                motion.fieldWarp * 24f +
+                motion.audioEnergy * 80f
+
+        coreWispPaint.style =
+            Paint.Style.STROKE
+
+        coreWispPaint.strokeWidth =
+            radius *
+                (
+                    0.0045f +
+                        stateEnergy * 0.0035f
+                    )
+
+        coreWispPaint.strokeCap =
+            Paint.Cap.ROUND
+
+        coreWispPaint.color =
+            highlightColor(
+                color
+            )
+
+        coreWispPaint.alpha =
+            (
+                34f *
+                    motion.glowMultiplier *
+                    (
+                        0.65f +
+                            stateEnergy * 0.55f
+                        )
+                )
+                .toInt()
+                .coerceIn(
+                    10,
+                    65
+                )
+
+        /*
+         * Current 1
+         */
+        canvas.save()
+
+        canvas.rotate(
+            movement,
+            centerX,
+            centerY
+        )
+
+        canvas.drawArc(
+            centerX - coreRadius,
+            centerY - coreRadius * 0.82f,
+            centerX + coreRadius,
+            centerY + coreRadius * 0.82f,
+            205f,
+            78f + stateEnergy * 22f,
+            false,
+            coreWispPaint
+        )
+
+        canvas.restore()
+
+        /*
+         * Current 2
+         */
+        canvas.save()
+
+        canvas.rotate(
+            -movement * 0.72f,
+            centerX,
+            centerY
+        )
+
+        coreWispPaint.alpha =
+            (
+                27f *
+                    motion.glowMultiplier *
+                    (
+                        0.65f +
+                            stateEnergy * 0.50f
+                        )
+                )
+                .toInt()
+                .coerceIn(
+                    8,
+                    52
+                )
+
+        canvas.drawArc(
+            centerX - coreRadius * 0.86f,
+            centerY - coreRadius,
+            centerX + coreRadius * 0.86f,
+            centerY + coreRadius,
+            25f,
+            62f + stateEnergy * 18f,
+            false,
+            coreWispPaint
+        )
+
+        canvas.restore()
+
+        /*
+         * Current 3
+         */
+        canvas.save()
+
+        canvas.rotate(
+            movement * 0.43f,
+            centerX,
+            centerY
+        )
+
+        coreWispPaint.alpha =
+            (
+                21f *
+                    motion.glowMultiplier *
+                    (
+                        0.65f +
+                            stateEnergy * 0.45f
+                        )
+                )
+                .toInt()
+                .coerceIn(
+                    7,
+                    42
+                )
+
+        canvas.drawArc(
+            centerX - coreRadius * 0.72f,
+            centerY - coreRadius * 0.72f,
+            centerX + coreRadius * 0.72f,
+            centerY + coreRadius * 0.72f,
+            125f,
+            58f + stateEnergy * 16f,
+            false,
+            coreWispPaint
+        )
+
+        canvas.restore()
+
+        coreWispPaint.alpha =
+            0
     }
 
     /**
