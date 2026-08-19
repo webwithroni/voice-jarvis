@@ -3,6 +3,7 @@ package com.webwithroni.voicejarvis
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.util.Base64
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -46,6 +47,10 @@ import java.util.concurrent.TimeUnit
  * models/gemini-3.1-flash-live-preview
  */
 class GeminiLiveClient(
+
+    companion object {
+        private const val TAG = "GeminiLiveClient"
+    }
     private val apiKey: String,
     private val systemPrompt: String,
     private val voiceName: String = "Aoede",
@@ -289,6 +294,12 @@ class GeminiLiveClient(
 
                         transportState =
                             "DISCONNECTED"
+
+                        Log.e(
+                            TAG,
+                            "WEBSOCKET FAILURE: ${t.javaClass.simpleName}: ${t.message}",
+                            t
+                        )
 
                         onError(
                             "WebSocket error: " +
@@ -589,6 +600,11 @@ class GeminiLiveClient(
             val json =
                 JSONObject(text)
 
+            Log.d(
+                TAG,
+                "INBOUND: keys=${json.keys().asSequence().toList()}"
+            )
+
             /*
              * ==================================================
              * SETUP COMPLETE
@@ -605,6 +621,11 @@ class GeminiLiveClient(
 
                 transportState =
                     "READY"
+
+                Log.i(
+                    TAG,
+                    "SETUP COMPLETE: voice=$voiceName model=$model"
+                )
 
                 lastSetupAt =
                     SystemClock
@@ -838,6 +859,11 @@ class GeminiLiveClient(
                                     audio.isNotEmpty()
                                 ) {
 
+                                    Log.i(
+                                        TAG,
+                                        "AUDIO CHUNK: bytes=${audio.size}"
+                                    )
+
                                     onAudioChunk(
                                         audio
                                     )
@@ -912,6 +938,11 @@ class GeminiLiveClient(
                 )
             ) {
 
+                Log.i(
+                    TAG,
+                    "TURN COMPLETE"
+                )
+
                 onTurnComplete()
             }
 
@@ -928,6 +959,11 @@ class GeminiLiveClient(
                     false
                 )
             ) {
+
+                Log.i(
+                    TAG,
+                    "GENERATION COMPLETE"
+                )
 
                 onGenerationComplete()
             }
@@ -958,6 +994,11 @@ class GeminiLiveClient(
         ) {
             return
         }
+
+        Log.i(
+            TAG,
+            "SEND TEXT: $text setupCompleted=$setupCompleted transport=$transportState"
+        )
 
         val message =
             JSONObject().apply {
@@ -999,8 +1040,14 @@ class GeminiLiveClient(
                 )
             }
 
-        webSocket?.send(
-            message.toString()
+        val sent =
+            webSocket?.send(
+                message.toString()
+            ) ?: false
+
+        Log.i(
+            TAG,
+            "SEND TEXT RESULT: sent=$sent"
         )
     }
 
