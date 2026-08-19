@@ -12,6 +12,9 @@ android {
 
     defaultConfig {
         applicationId = "com.webwithroni.voicejarvis"
+
+        testInstrumentationRunner =
+            "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -132,6 +135,15 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+
+    androidTestImplementation(
+        "androidx.test.ext:junit:1.2.1"
+    )
+
+    androidTestImplementation(
+        "androidx.test:runner:1.6.2"
+    )
+
 
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:34.16.0"))

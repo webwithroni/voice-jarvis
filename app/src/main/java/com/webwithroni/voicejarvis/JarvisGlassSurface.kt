@@ -1,6 +1,7 @@
 package com.webwithroni.voicejarvis
 
 import android.content.Context
+import android.util.AttributeSet
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.widget.FrameLayout
@@ -26,9 +27,15 @@ import kotlin.math.roundToInt
  * Deliberately avoids real-time blur and elevation shadows.
  * This keeps rendering predictable on lower-end Android hardware.
  */
-class JarvisGlassSurface(
-    context: Context
-) : FrameLayout(context) {
+class JarvisGlassSurface @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0
+) : FrameLayout(
+    context,
+    attrs,
+    defStyleAttr
+) {
 
     companion object {
 

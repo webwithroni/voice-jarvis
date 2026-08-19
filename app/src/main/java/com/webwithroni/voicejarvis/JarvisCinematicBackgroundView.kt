@@ -4,6 +4,7 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
+import android.util.AttributeSet
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -22,9 +23,15 @@ import kotlin.math.sin
  * It never modifies or removes views from the screen
  * that hosts it.
  */
-class JarvisCinematicBackgroundView(
-    context: Context
-) : FrameLayout(context) {
+class JarvisCinematicBackgroundView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0
+) : FrameLayout(
+    context,
+    attrs,
+    defStyleAttr
+) {
 
     private val backgroundA =
         createImageLayer()
