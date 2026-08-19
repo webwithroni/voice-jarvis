@@ -3,6 +3,7 @@ package com.webwithroni.voicejarvis
 import android.content.Context
 import android.graphics.Color
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
 
@@ -43,8 +44,8 @@ class JarvisHomeVisualShell(
         addView(
             cinematicBackground,
             LayoutParams(
-                MATCH_PARENT,
-                MATCH_PARENT
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
         )
 

@@ -47,10 +47,6 @@ import java.util.concurrent.TimeUnit
  * models/gemini-3.1-flash-live-preview
  */
 class GeminiLiveClient(
-
-    companion object {
-        private const val TAG = "GeminiLiveClient"
-    }
     private val apiKey: String,
     private val systemPrompt: String,
     private val voiceName: String = "Aoede",
@@ -87,6 +83,10 @@ class GeminiLiveClient(
     private val onError: (String) -> Unit,
     private val onDisconnected: () -> Unit
 ) {
+
+    companion object {
+        private const val TAG = "GeminiLiveClient"
+    }
 
     private var webSocket: WebSocket? = null
 

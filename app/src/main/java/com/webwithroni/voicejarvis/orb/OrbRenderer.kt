@@ -7,6 +7,7 @@ import android.graphics.RadialGradient
 import android.graphics.Shader
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.pow
 
 /**
  * Main Canvas composition renderer for the Jarvis Orb.
@@ -932,17 +933,17 @@ class OrbRenderer(
              * This keeps sorting and projection mathematically
              * consistent and removes the second spherical transform.
              */
-            val x =
+            var x =
                 particleTransformedX[
                     particleIndex
                 ]
 
-            val y =
+            var y =
                 particleTransformedY[
                     particleIndex
                 ]
 
-            val z =
+            var z =
                 particleTransformedZ[
                     particleIndex
                 ]
