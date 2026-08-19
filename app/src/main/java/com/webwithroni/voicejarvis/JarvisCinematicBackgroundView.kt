@@ -402,9 +402,10 @@ class JarvisCinematicBackgroundView(
     }
 
     private fun configureAtmosphere() {
-
-        atmosphere.gravity =
-            Gravity.CENTER
+        /*
+         * Atmosphere already fills the parent via fullLayoutParams().
+         * No additional gravity configuration is required.
+         */
     }
 
     private fun configureVignette() {
