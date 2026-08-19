@@ -3,6 +3,7 @@ package com.webwithroni.voicejarvis
 import android.content.Context
 import android.graphics.Color
 import android.view.View
+import android.util.AttributeSet
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
@@ -18,9 +19,15 @@ import androidx.core.content.ContextCompat
  * - navigation
  * - Orb state logic
  */
-class JarvisHomeVisualShell(
-    context: Context
-) : FrameLayout(context) {
+class JarvisHomeVisualShell @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0
+) : FrameLayout(
+    context,
+    attrs,
+    defStyleAttr
+) {
 
     private val cinematicBackground =
         JarvisCinematicBackgroundView(
