@@ -1071,5 +1071,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
             unbindService(connection)
             bound = false
         }
+
+        super.onDestroy()
     }
 }
