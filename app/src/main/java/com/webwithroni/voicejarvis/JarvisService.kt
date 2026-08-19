@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.webwithroni.voicejarvis.orb.OrbActivity
 
 class JarvisService : Service() {
 
@@ -57,6 +58,10 @@ class JarvisService : Service() {
 
         fun onPlaybackAmplitude(
             level: Float
+        )
+
+        fun onActivity(
+            activity: OrbActivity
         )
 
         fun onLog(
@@ -182,6 +187,26 @@ class JarvisService : Service() {
 
     private val firebaseTurnTools =
         mutableListOf<String>()
+
+    /*
+     * 3.3.3.10A — Runtime OrbActivity ownership.
+     *
+     * Every active tool receives a unique generation token.
+     * An older tool completion can never clear a newer tool's
+     * visual activity.
+     */
+    private val orbActivityLock =
+        Any()
+
+    private var orbActivityGeneration =
+        0L
+
+    private val activeOrbActivities =
+        linkedMapOf<Long, OrbActivity>()
+
+    @Volatile
+    private var orbWaitingForConfirmation =
+        false
 
     private val ampThreshold =
         0.045f
@@ -1130,6 +1155,17 @@ class JarvisService : Service() {
                             name
                         )
 
+                    /*
+                     * Begin lifecycle-owned OrbActivity.
+                     *
+                     * This generation belongs exclusively to the
+                     * current tool invocation.
+                     */
+                    val orbActivityGeneration =
+                        beginOrbActivity(
+                            name
+                        )
+
                     val toolStartedAt =
                         SystemClockCompat
                             .elapsedRealtime()
@@ -1245,6 +1281,24 @@ class JarvisService : Service() {
                             performanceTraceId,
                             toolSucceeded
                         )
+
+
+
+                                        /*
+                     * 3.3.3.10A — Complete this tool's activity ownership.
+                     *
+                     * A generation token prevents stale tool completions from
+                     * clearing a newer operation.
+                     */
+                    val confirmationRequired =
+                        pendingConfirmation != null
+
+                    handler.post {
+                        finishOrbActivity(
+                            orbActivityGeneration,
+                            confirmationRequired
+                        )
+                    }
 
                     geminiClient
                         ?.sendToolResponse(
@@ -1517,6 +1571,48 @@ class JarvisService : Service() {
             )
 
         geminiClient?.connect()
+    }
+
+    /**
+     * 3.3.3.9A — Runtime tool-to-visual activity classification.
+     *
+     * JarvisState = conversational state.
+     * OrbActivity = active operation.
+     */
+    private fun classifyOrbActivity(
+        toolName: String
+    ): OrbActivity {
+
+        return when (
+            toolName
+                .trim()
+                .lowercase(Locale.getDefault())
+        ) {
+
+            "search_web",
+            "search_google" ->
+                OrbActivity.SEARCHING
+
+            "deep_research" ->
+                OrbActivity.RESEARCHING
+
+            "toggle_flashlight",
+            "set_volume",
+            "set_alarm",
+            "set_timer",
+            "navigate_to",
+            "read_screen",
+            "tap_element",
+            "type_text",
+            "scroll_screen",
+            "go_back",
+            "go_home",
+            "open_accessibility_settings" ->
+                OrbActivity.CONTROLLING_DEVICE
+
+            else ->
+                OrbActivity.EXECUTING_TOOL
+        }
     }
 
     private fun executeCapability(
@@ -1901,6 +1997,13 @@ class JarvisService : Service() {
             "Confirmation required for: ${request.action}"
         )
 
+        orbWaitingForConfirmation =
+            true
+
+        pushOrbActivity(
+            OrbActivity.WAITING_CONFIRMATION
+        )
+
         pushState(
             JarvisState.THINKING,
             "CONFIRMATION REQUIRED",
@@ -2003,6 +2106,8 @@ class JarvisService : Service() {
 
             clearPendingConfirmation()
 
+            clearOrbConfirmationActivity()
+
             pushState(
                 JarvisState.LISTENING,
                 "CONFIRMATION EXPIRED",
@@ -2023,6 +2128,8 @@ class JarvisService : Service() {
         ) {
 
             clearPendingConfirmation()
+
+            clearOrbConfirmationActivity()
 
             pushState(
                 JarvisState.LISTENING,
@@ -2051,6 +2158,8 @@ class JarvisService : Service() {
              * more than once.
              */
             clearPendingConfirmation()
+
+            clearOrbConfirmationActivity()
 
             val result =
                 capabilityBus.execute(
@@ -2641,6 +2750,137 @@ class JarvisService : Service() {
 
         listener?.onMicAmplitude(
             level
+        )
+    }
+
+    private fun pushOrbActivity(
+        activity: OrbActivity
+    ) {
+        listener?.onActivity(
+            activity
+        )
+    }
+
+    /**
+     * Start ownership of one tool's visual activity.
+     */
+    private fun beginOrbActivity(
+        toolName: String
+    ): Long {
+
+        val activity =
+            classifyOrbActivity(
+                toolName
+            )
+
+        val generation =
+            synchronized(
+                orbActivityLock
+            ) {
+
+                orbActivityGeneration +=
+                    1L
+
+                val owner =
+                    orbActivityGeneration
+
+                activeOrbActivities[owner] =
+                    activity
+
+                owner
+            }
+
+        if (
+            !orbWaitingForConfirmation
+        ) {
+            pushOrbActivity(
+                activity
+            )
+        }
+
+        return generation
+    }
+
+    /**
+     * Finish one tool's visual activity ownership.
+     *
+     * The generation token guarantees that an old completion
+     * cannot wipe a newer active tool.
+     */
+    private fun finishOrbActivity(
+        generation: Long,
+        confirmationRequired: Boolean
+    ) {
+
+        var nextActivity =
+            OrbActivity.NONE
+
+        synchronized(
+            orbActivityLock
+        ) {
+
+            activeOrbActivities.remove(
+                generation
+            )
+
+            if (
+                confirmationRequired
+            ) {
+
+                orbWaitingForConfirmation =
+                    true
+
+            } else if (
+                !orbWaitingForConfirmation &&
+                activeOrbActivities.isNotEmpty()
+            ) {
+
+                nextActivity =
+                    activeOrbActivities
+                        .values
+                        .last()
+            }
+        }
+
+        if (
+            confirmationRequired
+        ) {
+
+            pushOrbActivity(
+                OrbActivity.WAITING_CONFIRMATION
+            )
+
+            return
+        }
+
+        if (
+            orbWaitingForConfirmation
+        ) {
+            return
+        }
+
+        pushOrbActivity(
+            nextActivity
+        )
+    }
+
+    /**
+     * Clear the confirmation visual lifecycle.
+     */
+    private fun clearOrbConfirmationActivity() {
+
+        synchronized(
+            orbActivityLock
+        ) {
+
+            orbWaitingForConfirmation =
+                false
+
+            activeOrbActivities.clear()
+        }
+
+        pushOrbActivity(
+            OrbActivity.NONE
         )
     }
 

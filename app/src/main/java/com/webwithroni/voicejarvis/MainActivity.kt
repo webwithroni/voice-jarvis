@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     private lateinit var muteIcon: ImageView
     private lateinit var muteLabel: TextView
     private lateinit var orb: ParticleOrbView
+    private lateinit var homeVisualShell: JarvisHomeVisualShell
     private lateinit var orbCenterIcon: ImageView
     private lateinit var conversationCard: View
     private lateinit var userBlock: View
@@ -70,6 +71,14 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     private var debugVisible = false
     private var micPermanentlyDenied = false
     private var lastUserTextCache: String = ""
+
+    /*
+     * 3.3.3.10A — Runtime operation activity.
+     *
+     * Independent from JarvisState.
+     */
+    private var currentOrbActivity =
+        OrbActivity.NONE
 
     private val handler = Handler(Looper.getMainLooper())
     private var thinkingStepIndex = 0
@@ -186,6 +195,7 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         muteIcon = findViewById(R.id.muteIcon)
         muteLabel = findViewById(R.id.muteLabel)
         orb = findViewById(R.id.orbView)
+        homeVisualShell = findViewById(R.id.homeVisualShell)
         orbCenterIcon = findViewById(R.id.orbCenterIcon)
         conversationCard = findViewById(R.id.conversationCard)
         userBlock = findViewById(R.id.userBlock)
@@ -476,9 +486,18 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
                 1f
             }
 
-        orb.setReducedMotion(
+        val reducedMotion =
             animationScale <= 0f
+
+        orb.setReducedMotion(
+            reducedMotion
         )
+
+        if (::homeVisualShell.isInitialized) {
+            homeVisualShell.setReducedMotion(
+                reducedMotion
+            )
+        }
     }
 
     private fun ensurePermissionsThenStart() {
@@ -643,6 +662,25 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         orb.setState(
             orbState
         )
+
+        /*
+         * Home cinematic visual system.
+         *
+         * The visual shell follows the same canonical
+         * JarvisState used by the Orb and runtime UI.
+         *
+         * This keeps visual state deterministic:
+         *
+         * LISTENING  -> SYSTEM_CORE
+         * HEARING    -> CONNECTION
+         * THINKING   -> COGNITIVE_FLOW
+         * SPEAKING   -> RESPONSE
+         * ERROR      -> INTENT_FIELD
+         * PAUSED     -> ORIGIN
+         */
+        if (::homeVisualShell.isInitialized) {
+            homeVisualShell.setState(state)
+        }
 
         val orbActivity =
             when {
@@ -974,6 +1012,21 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
         }
     }
 
+    override fun onActivity(
+        activity: OrbActivity
+    ) {
+
+        runOnUiThread {
+
+            currentOrbActivity =
+                activity
+
+            orb.setActivity(
+                activity
+            )
+        }
+    }
+
     override fun onPlaybackAmplitude(
         level: Float
     ) {
@@ -1007,8 +1060,12 @@ class MainActivity : AppCompatActivity(), JarvisService.UiListener {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         stopThinkingChecklist()
+
+        if (::homeVisualShell.isInitialized) {
+            homeVisualShell.dispose()
+        }
+
         if (bound) {
             service?.listener = null
             unbindService(connection)

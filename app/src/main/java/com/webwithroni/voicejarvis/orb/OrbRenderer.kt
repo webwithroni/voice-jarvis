@@ -78,6 +78,81 @@ class OrbRenderer(
     private val ripplePath =
         Path()
 
+    /*
+     * Reused spherical projection buffer.
+     *
+     * Avoids allocating FloatArray objects for every particle
+     * on every rendered frame.
+     */
+    private val sphericalPositionBuffer =
+        FloatArray(3)
+
+    /*
+     * Reusable render-order buffer.
+     *
+     * Stores particle indices rather than Particle references so
+     * the frame renderer avoids creating temporary collections.
+     */
+    private val particleRenderOrder =
+        IntArray(
+            config.particleCount
+        )
+
+    /*
+     * 3.3.2.14 — Allocation-free depth buckets.
+     *
+     * Fixed bucket count keeps render ordering bounded and avoids
+     * per-frame sorting of the full particle list.
+     */
+    private companion object {
+        /*
+         * 3.3.2.16 — Higher-resolution depth quantization.
+         *
+         * 64 fixed buckets provide finer separation between particles
+         * while preserving the allocation-free O(n) render ordering.
+         */
+        const val DEPTH_BUCKET_COUNT = 64
+    }
+
+    private val depthBucketCounts =
+        IntArray(
+            DEPTH_BUCKET_COUNT
+        )
+
+    private val depthBucketOffsets =
+        IntArray(
+            DEPTH_BUCKET_COUNT
+        )
+
+    private val particleDepthBuckets =
+        IntArray(
+            config.particleCount
+        )
+
+    /*
+     * Reused transformed-Z values.
+     *
+     * The depth bucket pass computes these once per frame.
+     * The draw pass reuses them instead of recalculating depth.
+     */
+    private val particleTransformedZ =
+        FloatArray(
+            config.particleCount
+        )
+
+    /*
+     * Complete camera-space coordinates reused by the render pass.
+     */
+    private val particleTransformedX =
+        FloatArray(
+            config.particleCount
+        )
+
+    private val particleTransformedY =
+        FloatArray(
+            config.particleCount
+        )
+
     private val particles =
         OrbParticleSystem(
             config = config
@@ -558,6 +633,21 @@ class OrbRenderer(
     /**
      * Render the layered particle field.
      */
+    /**
+     * Render the layered particle field as a lightweight 3D sphere.
+     *
+     * Pipeline:
+     *
+     * spherical coordinates
+     *        ↓
+     * orbital rotation
+     *        ↓
+     * perspective projection
+     *        ↓
+     * depth-aware size/alpha
+     *        ↓
+     * Canvas particle
+     */
     private fun drawParticles(
         canvas: Canvas,
         centerX: Float,
@@ -566,86 +656,490 @@ class OrbRenderer(
         motion: OrbMotionController.Snapshot
     ) {
 
-        val halfWidth =
-            radius *
-                config.shellScale
-
-        val halfHeight =
-            radius *
-                config.shellScale *
-                0.88f
-
-        val fieldCenterY =
-            centerY
-
         val particleScale =
             motion.particleMultiplier
 
-        for (
-            particle in particles.particles()
-        ) {
+        val time =
+            particles.elapsedSeconds()
 
-            val depth =
-                particle.depth
+        /*
+         * State-driven orbital speed.
+         */
+        val rotationSpeed =
+            when (state) {
 
-            val orbitalRadius =
-                particle.orbitRadius *
-                    radius
+                OrbState.LISTENING ->
+                    0.22f
 
-            val angle =
-                particle.angle
+                OrbState.HEARING ->
+                    0.48f
 
-            val x =
-                centerX +
-                    cos(angle) *
-                    orbitalRadius
+                OrbState.THINKING ->
+                    0.82f
 
-            val y =
-                fieldCenterY +
-                    sin(angle) *
-                    orbitalRadius *
-                    0.70f
+                OrbState.SPEAKING ->
+                    0.58f
+
+                OrbState.ERROR ->
+                    0.30f
+
+                OrbState.PAUSED ->
+                    0.04f
+
+                OrbState.PERMISSION_REQUIRED ->
+                    0.10f
+            }
+
+        val yaw =
+            time *
+                rotationSpeed
+
+        val pitch =
+            sin(
+                time * 0.38f
+            ) * 0.10f
+
+        val cosYaw =
+            cos(yaw)
+
+        val sinYaw =
+            sin(yaw)
+
+        val cosPitch =
+            cos(pitch)
+
+        val sinPitch =
+            sin(pitch)
+
+        /*
+         * Virtual camera distance.
+         */
+        val cameraDistance =
+            3.8f
+
+        val renderParticles =
+            particles.particles()
+
+        /*
+         * 3.3.2.14 — Fixed depth bucket ordering.
+         *
+         * Pipeline:
+         *
+         *   spherical position
+         *          ↓
+         *   yaw + pitch rotation
+         *          ↓
+         *   transformed Z
+         *          ↓
+         *   depth bucket
+         *          ↓
+         *   far → near render order
+         *
+         * This avoids the quadratic insertion-sort cost.
+         */
+
+        java.util.Arrays.fill(
+            depthBucketCounts,
+            0
+        )
+
+        val renderCount =
+            minOf(
+                renderParticles.size,
+                particleRenderOrder.size
+            )
+
+        /*
+         * First pass:
+         * compute transformed depth and assign each particle
+         * to one of the fixed buckets.
+         */
+        for (index in 0 until renderCount) {
+
+            val particle =
+                renderParticles[index]
+
+            particles.sphericalPosition(
+                particle,
+                sphericalPositionBuffer
+            )
+
+            var x =
+                sphericalPositionBuffer[0]
+
+            var y =
+                sphericalPositionBuffer[1]
+
+            var z =
+                sphericalPositionBuffer[2]
 
             /*
-             * Slight elliptical compression keeps the
-             * particle field organic rather than perfectly
-             * spherical.
+             * Y-axis rotation.
              */
-            val clampedX =
-                x.coerceIn(
-                    centerX - halfWidth,
-                    centerX + halfWidth
-                )
+            val rotatedX =
+                x * cosYaw -
+                    z * sinYaw
 
-            val clampedY =
-                y.coerceIn(
-                    fieldCenterY - halfHeight,
-                    fieldCenterY + halfHeight
-                )
+            val rotatedZ =
+                x * sinYaw +
+                    z * cosYaw
 
-            val size =
-                particle.size *
-                    (
-                        0.65f +
-                            depth *
-                            0.55f
-                        ) *
-                    particleScale
+            x =
+                rotatedX
 
-            val alpha =
+            z =
+                rotatedZ
+
+            /*
+             * X-axis pitch.
+             */
+            val pitchedY =
+                y * cosPitch -
+                    z * sinPitch
+
+            val pitchedZ =
+                y * sinPitch +
+                    z * cosPitch
+
+            y =
+                pitchedY
+
+            z =
+                pitchedZ
+
+            /*
+             * Store the exact camera-space coordinates.
+             */
+            particleTransformedX[index] =
+                x
+
+            particleTransformedY[index] =
+                y
+
+            particleTransformedZ[index] =
+                z
+
+            /*
+             * Convert transformed Z from roughly [-1.5, 1.5]
+             * into a stable [0, bucketCount-1] range.
+             */
+            val normalizedDepth =
                 (
-                    particle.alpha *
-                        (
-                            0.55f +
-                                depth *
-                                0.45f
-                            ) *
-                        particleScale *
-                        255f
+                    (
+                        z +
+                            1.5f
+                        ) /
+                        3.0f
+                    )
+                    .coerceIn(
+                        0f,
+                        0.999999f
+                    )
+
+            val bucket =
+                (
+                    normalizedDepth *
+                        DEPTH_BUCKET_COUNT
                     )
                     .toInt()
                     .coerceIn(
                         0,
+                        DEPTH_BUCKET_COUNT - 1
+                    )
+
+            particleDepthBuckets[index] =
+                bucket
+
+            depthBucketCounts[bucket]++
+        }
+
+        /*
+         * Prefix offsets.
+         *
+         * Bucket 0 represents the farthest particles.
+         * The final bucket represents the nearest particles.
+         */
+        var runningOffset =
+            0
+
+        for (
+            bucket in
+                0 until DEPTH_BUCKET_COUNT
+        ) {
+
+            depthBucketOffsets[bucket] =
+                runningOffset
+
+            runningOffset +=
+                depthBucketCounts[bucket]
+        }
+
+        /*
+         * Second pass:
+         * place each particle index directly into its bucket range.
+         */
+        for (index in 0 until renderCount) {
+
+            val bucket =
+                particleDepthBuckets[index]
+
+            val destination =
+                depthBucketOffsets[bucket]
+
+            particleRenderOrder[destination] =
+                index
+
+            depthBucketOffsets[bucket] =
+                destination + 1
+        }
+
+        /*
+         * Rebuild offsets because the renderer does not want the
+         * working cursor values to persist into the next frame.
+         */
+        runningOffset =
+            0
+
+        for (
+            bucket in
+                0 until DEPTH_BUCKET_COUNT
+        ) {
+
+            val count =
+                depthBucketCounts[bucket]
+
+            depthBucketOffsets[bucket] =
+                runningOffset
+
+            runningOffset +=
+                count
+        }
+
+        for (orderIndex in 0 until renderCount) {
+
+            val particleIndex =
+                particleRenderOrder[orderIndex]
+
+            val particle =
+                renderParticles[
+                    particleIndex
+                ]
+
+            /*
+             * Reuse the exact camera-space coordinates calculated
+             * during the depth-bucket pass.
+             *
+             * This keeps sorting and projection mathematically
+             * consistent and removes the second spherical transform.
+             */
+            val x =
+                particleTransformedX[
+                    particleIndex
+                ]
+
+            val y =
+                particleTransformedY[
+                    particleIndex
+                ]
+
+            val z =
+                particleTransformedZ[
+                    particleIndex
+                ]
+
+            /*
+             * State-specific organic deformation.
+             */
+            val deformation =
+                when (state) {
+
+                    OrbState.THINKING ->
+                        1f +
+                            motion.fieldWarp *
+                            0.040f *
+                            sin(
+                                particle.phase +
+                                    time * 2.4f
+                            )
+
+                    OrbState.HEARING,
+                    OrbState.SPEAKING ->
+                        1f +
+                            motion.audioEnergy *
+                            0.055f *
+                            sin(
+                                particle.phase +
+                                    time * 5.0f
+                            )
+
+                    else ->
+                        1f +
+                            motion.breath *
+                            0.020f *
+                            sin(
+                                particle.phase +
+                                    time
+                            )
+                }
+
+            x *= deformation
+            y *= deformation
+            z *= deformation
+
+            /*
+             * Perspective projection.
+             */
+            val perspective =
+                (
+                    cameraDistance /
+                        (
+                            cameraDistance -
+                                z
+                            )
+                    )
+                    .coerceIn(
+                        0.72f,
+                        1.45f
+                    )
+
+            val depth01 =
+                (
+                    z /
+                        cameraDistance +
+                        1f
+                    )
+                    .coerceIn(
+                        0.35f,
+                        1.55f
+                    )
+
+            val projectedX =
+                centerX +
+                    x *
+                    radius *
+                    perspective
+
+            val projectedY =
+                centerY +
+                    y *
+                    radius *
+                    perspective *
+                    0.96f
+
+            /*
+             * 3.3.2.8 — Depth-aware particle rendering.
+             *
+             * The particle field should read as a volume rather
+             * than a flat collection of dots.
+             *
+             * Back:
+             *   smaller
+             *   dimmer
+             *   softer
+             *
+             * Middle:
+             *   balanced visibility
+             *
+             * Front:
+             *   slightly larger
+             *   brighter
+             *   more visually dominant
+             *
+             * The response remains deliberately restrained so the
+             * Orb never turns into a noisy star field.
+             */
+
+            val depthVisibility =
+                depth01.coerceIn(
+                    0.35f,
+                    1.55f
+                )
+
+            /*
+             * 3.3.2.17 — Controlled volumetric depth falloff.
+             *
+             * Preserve the full particle field, but give the rear
+             * hemisphere a softer visual contribution and the front
+             * hemisphere a slightly stronger presence.
+             *
+             * This affects only visual weighting:
+             * position and perspective remain unchanged.
+             */
+            val normalizedDepth =
+                (
+                    (
+                        depthVisibility - 0.35f
+                    ) / 1.20f
+                )
+                .coerceIn(
+                    0f,
+                    1f
+                )
+
+            val depthCurve =
+                normalizedDepth.pow(
+                    1.22f
+                )
+
+            val volumetricFalloff =
+                0.72f +
+                    depthCurve *
+                    0.28f
+
+            /*
+             * Stable per-particle micro variation.
+             *
+             * phase is already deterministic, so this does not
+             * introduce frame-to-frame randomness or allocations.
+             */
+            val microVariation =
+                0.92f +
+                    (
+                        sin(
+                            particle.phase
+                        ) *
+                        0.08f
+                    )
+
+            val size =
+                particle.size *
+                    (
+                        0.44f +
+                            depthCurve *
+                            0.66f
+                        ) *
+                    microVariation *
+                    particleScale *
+                    perspective *
+                    volumetricFalloff
+
+            /*
+             * Rear particles remain visible.
+             *
+             * Do not let depth reduce alpha to zero because that
+             * would create obvious popping as particles rotate
+             * through the rear hemisphere.
+             */
+            val depthAlpha =
+                (
+                    0.48f +
+                        depthCurve *
+                        0.52f
+                    ) *
+                    volumetricFalloff
+
+            val alpha =
+                (
+                    particle.alpha *
+                        depthAlpha *
+                        microVariation *
+                        particleScale *
+                        perspective *
+                        255f
+                    )
+                    .toInt()
+                    .coerceIn(
+                        6,
                         255
                     )
 
@@ -659,6 +1153,121 @@ class OrbRenderer(
             particlePaint.style =
                 Paint.Style.FILL
 
+            /*
+             * 3.3.2.9 — Particle visual hierarchy.
+             *
+             * Depth determines how strongly a particle contributes
+             * to the Orb's perceived volume.
+             *
+             * Rear particles:
+             *   restrained
+             *
+             * Middle particles:
+             *   normal field visibility
+             *
+             * Front particles:
+             *   brighter and more prominent
+             *
+             * Layer identity is preserved through particleColor().
+             * This stage only adjusts luminance/alpha behavior.
+             */
+
+            val frontLight =
+                (
+                    (
+                        depthCurve -
+                            0.75f
+                        ) /
+                        0.80f
+                    )
+                    .coerceIn(
+                        0f,
+                        1f
+                    )
+
+            val rearFade =
+                (
+                    1f -
+                        (
+                            0.55f -
+                                depthCurve
+                            )
+                            .coerceIn(
+                                0f,
+                                0.55f
+                            ) *
+                        0.32f
+                    )
+                    .coerceIn(
+                        0.72f,
+                        1f
+                    )
+
+            /*
+             * Large particles receive slightly stronger depth
+             * separation because they act as volumetric anchors.
+             */
+            val layerBoost =
+                when (particle.layer) {
+
+                    OrbParticleSystem.Layer.MICRO ->
+                        0.92f
+
+                    OrbParticleSystem.Layer.ORBIT ->
+                        1.00f
+
+                    OrbParticleSystem.Layer.LARGE ->
+                        1.08f
+                }
+
+            /*
+             * State-aware luminance response.
+             *
+             * THINKING / SPEAKING can expose the front hemisphere
+             * slightly more strongly, while idle states remain calm.
+             */
+            val stateLight =
+                when (state) {
+
+                    OrbState.THINKING ->
+                        1f +
+                            frontLight *
+                            0.10f
+
+                    OrbState.SPEAKING ->
+                        1f +
+                            frontLight *
+                            0.14f
+
+                    OrbState.HEARING ->
+                        1f +
+                            frontLight *
+                            0.08f
+
+                    OrbState.ERROR ->
+                        1f +
+                            frontLight *
+                            0.04f
+
+                    else ->
+                        1f +
+                            frontLight *
+                            0.05f
+                }
+
+            val finalAlpha =
+                (
+                    alpha *
+                        rearFade *
+                        layerBoost *
+                        stateLight
+                    )
+                    .toInt()
+                    .coerceIn(
+                        4,
+                        255
+                    )
+
             particlePaint.color =
                 particleColor(
                     state,
@@ -666,11 +1275,11 @@ class OrbRenderer(
                 )
 
             particlePaint.alpha =
-                alpha
+                finalAlpha
 
             canvas.drawCircle(
-                clampedX,
-                clampedY,
+                projectedX,
+                projectedY,
                 size,
                 particlePaint
             )
@@ -989,6 +1598,48 @@ class OrbRenderer(
     }
 
     /**
+     * 3.3.2.18 — Shared energy lighting envelope.
+     *
+     * Keeps the shell, membrane, inner shell and core visually
+     * connected instead of letting every layer brighten independently.
+     *
+     * audioEnergy:
+     *   transient voice energy
+     *
+     * pulse:
+     *   rhythmic system pulse
+     *
+     * glowMultiplier:
+     *   global state-driven glow strength
+     *
+     * Returns a restrained [0, 1.35] visual intensity.
+     */
+    private fun energyLightEnvelope(
+        motion: OrbMotionController.Snapshot
+    ): Float {
+
+        val signal =
+            (
+                0.62f +
+                    motion.audioEnergy * 0.24f +
+                    motion.pulse * 0.14f
+                )
+                .coerceIn(
+                    0.45f,
+                    1.10f
+                )
+
+        return (
+            signal *
+                motion.glowMultiplier
+            )
+            .coerceIn(
+                0.40f,
+                1.35f
+            )
+    }
+
+    /**
      * Main translucent energy shell.
      */
     private fun drawEnergyShell(
@@ -1007,6 +1658,11 @@ class OrbRenderer(
         val shellRadius =
             radius *
                 motion.shellScale
+
+        val lightEnvelope =
+            energyLightEnvelope(
+                motion
+            )
 
         shellPaint.style =
             Paint.Style.FILL
@@ -1032,8 +1688,8 @@ class OrbRenderer(
 
         shellPaint.alpha =
             (
-                62f *
-                    motion.glowMultiplier
+                58f *
+                    lightEnvelope
                 )
                 .toInt()
                 .coerceIn(
@@ -1075,12 +1731,12 @@ class OrbRenderer(
 
         ringPaint.alpha =
             (
-                75f *
-                    motion.glowMultiplier *
+                72f *
+                    lightEnvelope *
                     (
                         0.92f +
                             motion.audioEnergy *
-                            0.40f
+                            0.32f
                         )
                 )
                 .toInt()
@@ -1131,6 +1787,11 @@ class OrbRenderer(
                 motion.innerCoreScale *
                 1.25f
 
+        val lightEnvelope =
+            energyLightEnvelope(
+                motion
+            )
+
         innerShellPaint.style =
             Paint.Style.FILL
 
@@ -1156,12 +1817,12 @@ class OrbRenderer(
 
         innerShellPaint.alpha =
             (
-                48f *
-                    motion.glowMultiplier *
+                44f *
+                    lightEnvelope *
                     (
                         0.78f +
-                            motion.audioEnergy * 0.42f +
-                            motion.pulse * 0.18f
+                            motion.audioEnergy * 0.36f +
+                            motion.pulse * 0.14f
                     )
                 )
                 .toInt()
@@ -1195,11 +1856,11 @@ class OrbRenderer(
 
             val bloomAlpha =
                 (
-                    30f *
-                        motion.glowMultiplier *
+                    27f *
+                        lightEnvelope *
                         (
                             0.75f +
-                                motion.audioEnergy * 0.45f
+                                motion.audioEnergy * 0.38f
                         )
                     )
                     .toInt()
@@ -1357,13 +2018,117 @@ class OrbRenderer(
                         OrbParticleSystem.Layer.MICRO
                     )
 
+                /*
+                 * 3.3.2.10 — Core / energy hierarchy.
+                 *
+                 * The innermost MICRO particles form the Orb's
+                 * energetic nucleus.
+                 *
+                 * The nucleus should feel:
+                 *
+                 *   dense
+                 *   luminous
+                 *   alive
+                 *   restrained
+                 *
+                 * It must remain visually subordinate to the main
+                 * membrane glow while clearly reading as the source
+                 * of the Orb's energy.
+                 */
+
+                val coreTime =
+                    particles.elapsedSeconds()
+
+                /*
+                 * Slow breathing keeps the nucleus alive even when
+                 * there is no audio input.
+                 */
+                val coreBreath =
+                    1f +
+                        sin(
+                            coreTime *
+                                0.95f +
+                                particle.phase
+                        ) *
+                        0.045f
+
+                /*
+                 * Audio states create a stronger but controlled
+                 * nucleus response.
+                 */
+                val coreAudio =
+                    when (state) {
+
+                        OrbState.HEARING ->
+                            1f +
+                                motion.audioEnergy *
+                                0.16f
+
+                        OrbState.SPEAKING ->
+                            1f +
+                                motion.audioEnergy *
+                                0.22f
+
+                        OrbState.THINKING ->
+                            1f +
+                                motion.fieldWarp *
+                                0.10f
+
+                        OrbState.ERROR ->
+                            1f +
+                                motion.fieldWarp *
+                                0.05f
+
+                        else ->
+                            1f
+                    }
+
+                /*
+                 * Depth still matters inside the nucleus, but with
+                 * a much smaller range than the outer particle field.
+                 */
+                val coreDepth =
+                    0.90f +
+                        particle.depth *
+                        0.18f
+
+                val coreScale =
+                    coreBreath *
+                        coreAudio *
+                        coreDepth
+
+                val coreSize =
+                    size *
+                        coreScale
+
+                /*
+                 * The nucleus receives a modest alpha lift.
+                 *
+                 * Avoiding 255 keeps the underlying glow and membrane
+                 * visible through the particle field.
+                 */
+                val coreAlpha =
+                    (
+                        alpha *
+                            (
+                                0.88f +
+                                    coreAudio *
+                                    0.12f
+                                )
+                        )
+                        .toInt()
+                        .coerceIn(
+                            8,
+                            255
+                        )
+
                 particlePaint.alpha =
-                    alpha
+                    coreAlpha
 
                 canvas.drawCircle(
                     x,
                     y,
-                    size,
+                    coreSize,
                     particlePaint
                 )
 
@@ -1393,14 +2158,26 @@ class OrbRenderer(
                 color
             )
 
+        /*
+         * 3.3.2.18C — Inner membrane lighting coherence.
+         *
+         * The inner membrane sits between the energy shell and
+         * neural core, so it follows the shared envelope rather
+         * than using an independent glow multiplier.
+         */
+        val membraneLight =
+            energyLightEnvelope(
+                motion
+            )
+
         ringPaint.alpha =
             (
-                42f *
-                    motion.glowMultiplier *
+                40f *
+                    membraneLight *
                     (
                         0.90f +
                             motion.pulse *
-                            0.25f
+                            0.22f
                         )
                 )
                 .toInt()
@@ -1480,6 +2257,28 @@ class OrbRenderer(
                 motion.innerCoreScale *
                 0.92f
 
+        /*
+         * 3.3.2.18B — Shared neural-core lighting.
+         *
+         * The wisps live inside the inner shell, so they inherit
+         * the same energy envelope but at a deliberately reduced
+         * intensity.
+         */
+        val lightEnvelope =
+            energyLightEnvelope(
+                motion
+            )
+
+        val coreLight =
+            (
+                0.58f +
+                    lightEnvelope * 0.32f
+                )
+                .coerceIn(
+                    0.58f,
+                    1.02f
+                )
+
         val movement =
             motion.breath * 55f +
                 motion.pulse * 35f +
@@ -1506,11 +2305,11 @@ class OrbRenderer(
 
         coreWispPaint.alpha =
             (
-                46f *
-                    motion.glowMultiplier *
+                42f *
+                    coreLight *
                     (
                         0.62f +
-                            stateEnergy * 0.58f
+                            stateEnergy * 0.52f
                         )
                 )
                 .toInt()
@@ -1556,11 +2355,11 @@ class OrbRenderer(
 
         coreWispPaint.alpha =
             (
-                34f *
-                    motion.glowMultiplier *
+                31f *
+                    coreLight *
                     (
                         0.62f +
-                            stateEnergy * 0.52f
+                            stateEnergy * 0.48f
                         )
                 )
                 .toInt()
@@ -1595,11 +2394,11 @@ class OrbRenderer(
 
         coreWispPaint.alpha =
             (
-                27f *
-                    motion.glowMultiplier *
+                25f *
+                    coreLight *
                     (
                         0.62f +
-                            stateEnergy * 0.48f
+                            stateEnergy * 0.44f
                         )
                 )
                 .toInt()

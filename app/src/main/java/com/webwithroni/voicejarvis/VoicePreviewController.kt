@@ -45,6 +45,27 @@ class VoicePreviewController(
     private var shuttingDown =
         false
 
+    /*
+     * Streaming playback has three distinct milestones:
+     *
+     * 1. Gemini produced at least one audio chunk.
+     * 2. Gemini finished generation.
+     * 3. AudioEngine drained the playback queue.
+     *
+     * Playback is complete only after all three are true.
+     *
+     * This prevents AudioEngine's initial empty-queue idle signal
+     * from terminating the preview before Gemini sends audio.
+     */
+    private var receivedAudio =
+        false
+
+    private var generationComplete =
+        false
+
+    private var playbackIdleObserved =
+        false
+
     private val previewTimeoutRunnable =
         Runnable {
 
@@ -89,6 +110,15 @@ class VoicePreviewController(
         shuttingDown =
             false
 
+        receivedAudio =
+            false
+
+        generationComplete =
+            false
+
+        playbackIdleObserved =
+            false
+
         onStateChanged(
             VoicePreviewState.LOADING
         )
@@ -131,7 +161,10 @@ class VoicePreviewController(
                             !shuttingDown
                         ) {
 
-                            finishAfterPlayback()
+                            playbackIdleObserved =
+                                true
+
+                            maybeFinishAfterPlayback()
                         }
                     }
                 },
@@ -179,10 +212,14 @@ class VoicePreviewController(
                             return@post
                         }
 
-                        handler.removeCallbacks(
-                            previewTimeoutRunnable
-                        )
-
+                        /*
+                         * Keep the preview timeout active until
+                         * playback actually completes.
+                         *
+                         * Setup success only proves the WebSocket
+                         * session is configured. It does NOT prove
+                         * that Gemini returned audio.
+                         */
                         engine.startPlayback()
 
                         onStateChanged(
@@ -205,6 +242,16 @@ class VoicePreviewController(
                         active &&
                         !shuttingDown
                     ) {
+
+                        receivedAudio =
+                            true
+
+                        /*
+                         * An idle event seen before the first
+                         * audio chunk is no longer meaningful.
+                         */
+                        playbackIdleObserved =
+                            false
 
                         engine.enqueuePlayback(
                             bytes
@@ -231,7 +278,20 @@ class VoicePreviewController(
                 },
 
                 onGenerationComplete = {
-                    // Wait for AudioEngine playback to drain.
+
+                    handler.post {
+
+                        if (
+                            active &&
+                            !shuttingDown
+                        ) {
+
+                            generationComplete =
+                                true
+
+                            maybeFinishAfterPlayback()
+                        }
+                    }
                 },
 
                 onToolCall = { id, name, args ->
@@ -265,9 +325,7 @@ class VoicePreviewController(
                             !shuttingDown
                         ) {
 
-                            onStateChanged(
-                                VoicePreviewState.IDLE
-                            )
+                            failPreview()
                         }
                     }
                 }
@@ -277,6 +335,33 @@ class VoicePreviewController(
             previewClient
 
         previewClient.connect()
+    }
+
+    private fun maybeFinishAfterPlayback() {
+
+        if (
+            !active ||
+            shuttingDown
+        ) {
+            return
+        }
+
+        /*
+         * Do not finish merely because the playback queue is
+         * temporarily empty.
+         *
+         * Gemini must have actually produced audio AND finished
+         * generation before queue-idle means completion.
+         */
+        if (
+            !receivedAudio ||
+            !generationComplete ||
+            !playbackIdleObserved
+        ) {
+            return
+        }
+
+        finishAfterPlayback()
     }
 
     private fun failPreview() {
@@ -308,6 +393,15 @@ class VoicePreviewController(
             null
 
         active =
+            false
+
+        receivedAudio =
+            false
+
+        generationComplete =
+            false
+
+        playbackIdleObserved =
             false
 
         onStateChanged(
@@ -360,6 +454,15 @@ class VoicePreviewController(
         active =
             false
 
+        receivedAudio =
+            false
+
+        generationComplete =
+            false
+
+        playbackIdleObserved =
+            false
+
         shuttingDown =
             false
     }
@@ -393,6 +496,15 @@ class VoicePreviewController(
             null
 
         active =
+            false
+
+        receivedAudio =
+            false
+
+        generationComplete =
+            false
+
+        playbackIdleObserved =
             false
 
         shuttingDown =

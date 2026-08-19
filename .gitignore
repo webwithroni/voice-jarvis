@@ -9,3 +9,5 @@
 .cxx
 *.apk
 *.aab
+
+.firebase/

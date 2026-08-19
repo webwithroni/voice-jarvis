@@ -45,7 +45,23 @@ class OrbParticleSystem(
         var size: Float,
         var alpha: Float,
         var phase: Float,
-        val layer: Layer
+        val layer: Layer,
+
+        /*
+         * Stable spherical coordinates.
+         *
+         * theta:
+         *   horizontal orbital angle
+         *
+         * phi:
+         *   vertical spherical angle
+         *
+         * radius:
+         *   normalized distance from the Orb center
+         */
+        var theta: Float = 0f,
+        var phi: Float = 0f,
+        var sphericalRadius: Float = 1f
     )
 
     private val particles =
@@ -270,21 +286,271 @@ class OrbParticleSystem(
              * This gives the field a living 3D feeling without
              * introducing a full 3D engine.
              */
+            /*
+             * Volumetric depth drift.
+             *
+             * Front/back separation changes very slowly so the
+             * particle field feels alive instead of flat.
+             *
+             * The motion is intentionally tiny:
+             * large depth jumps would make the sphere look noisy.
+             */
+            val depthDrift =
+                sin(
+                    elapsedSeconds *
+                        (
+                            0.32f +
+                                particle.angularVelocity *
+                                0.08f
+                            ) +
+                        particle.phase
+                ) *
+                    0.0035f
+
             particle.depth =
                 (
                     particle.depth +
-                        sin(
-                            elapsedSeconds *
-                                0.45f +
-                                particle.phase
-                        ) *
-                        0.0025f *
+                        depthDrift *
                         dt
-                )
+                    )
                     .coerceIn(
-                        0.15f,
+                        0.12f,
                         1f
                     )
+
+            /*
+             * 3.3.2.7 — State-specific volumetric behavior.
+             *
+             * Each Orb state gets a distinct particle-field response.
+             *
+             * LISTENING:
+             *   Calm orbital coherence.
+             *
+             * HEARING:
+             *   Audio-reactive outward breathing.
+             *
+             * THINKING:
+             *   Asymmetric neural turbulence.
+             *
+             * SPEAKING:
+             *   Radial energy propagation.
+             *
+             * ERROR:
+             *   Controlled instability.
+             *
+             * PAUSED:
+             *   Field nearly freezes.
+             */
+            when (state) {
+
+                OrbState.LISTENING -> {
+
+                    /*
+                     * Calm coherence.
+                     *
+                     * Very small synchronized breathing prevents
+                     * the idle sphere from looking completely static.
+                     */
+                    val listeningWave =
+                        sin(
+                            elapsedSeconds *
+                                0.72f +
+                                particle.phase
+                        )
+
+                    particle.angle +=
+                        listeningWave *
+                        0.012f *
+                        dt
+
+                    particle.orbitRadius *=
+                        1f +
+                            listeningWave *
+                            breath *
+                            0.0015f *
+                            dt
+                }
+
+                OrbState.HEARING -> {
+
+                    /*
+                     * Incoming voice creates a soft radial response.
+                     *
+                     * Higher-energy particles react slightly more
+                     * strongly so the sphere retains depth.
+                     */
+                    val hearingWave =
+                        sin(
+                            elapsedSeconds *
+                                4.5f +
+                                particle.phase
+                        )
+
+                    val hearingEnergy =
+                        audioEnergy *
+                            (
+                                0.55f +
+                                    particle.depth *
+                                    0.45f
+                                )
+
+                    particle.orbitRadius *=
+                        1f +
+                            hearingEnergy *
+                            hearingWave *
+                            0.018f *
+                            dt
+
+                    particle.angle +=
+                        hearingEnergy *
+                        hearingWave *
+                        0.035f *
+                        dt
+                }
+
+                OrbState.THINKING -> {
+
+                    /*
+                     * Thinking behaves like a neural field:
+                     * particles receive different turbulence phases
+                     * instead of moving as one synchronized shell.
+                     */
+                    val neuralWave =
+                        sin(
+                            elapsedSeconds *
+                                (
+                                    1.7f +
+                                        particle.angularVelocity *
+                                        0.9f
+                                    ) +
+                                particle.phase
+                        )
+
+                    val secondaryWave =
+                        cos(
+                            elapsedSeconds *
+                                0.85f +
+                                particle.theta *
+                                2f +
+                                particle.phase
+                        )
+
+                    val thinkingForce =
+                        fieldWarp *
+                            (
+                                neuralWave *
+                                    0.65f +
+                                    secondaryWave *
+                                    0.35f
+                                )
+
+                    particle.angle +=
+                        thinkingForce *
+                        0.075f *
+                        dt
+
+                    particle.orbitRadius *=
+                        1f +
+                            thinkingForce *
+                            0.0045f *
+                            dt
+                }
+
+                OrbState.SPEAKING -> {
+
+                    /*
+                     * Speaking creates a traveling radial impulse.
+                     *
+                     * The phase offset means particles do not expand
+                     * simultaneously, producing a shockwave-like field.
+                     */
+                    val speechWave =
+                        (
+                            sin(
+                                elapsedSeconds *
+                                    7.0f +
+                                    particle.phase
+                            ) *
+                                0.65f +
+                                0.35f
+                            )
+
+                    val speechEnergy =
+                        audioEnergy *
+                            speechWave
+
+                    particle.orbitRadius *=
+                        1f +
+                            speechEnergy *
+                            0.028f *
+                            dt
+
+                    particle.angle +=
+                        speechEnergy *
+                        0.055f *
+                        dt
+                }
+
+                OrbState.ERROR -> {
+
+                    /*
+                     * Error state introduces restrained jitter.
+                     *
+                     * This is intentionally deterministic and
+                     * phase-based rather than random-per-frame.
+                     */
+                    val errorWave =
+                        sin(
+                            elapsedSeconds *
+                                9.0f +
+                                particle.phase
+                        )
+
+                    particle.angle +=
+                        errorWave *
+                        0.045f *
+                        dt
+
+                    particle.orbitRadius *=
+                        1f +
+                            errorWave *
+                            0.0025f *
+                            dt
+                }
+
+                OrbState.PAUSED -> {
+
+                    /*
+                     * Almost frozen field.
+                     *
+                     * Keep an extremely small drift so the Orb does
+                     * not appear visually broken.
+                     */
+                    particle.angle +=
+                        particle.angularVelocity *
+                        0.004f *
+                        dt
+                }
+
+                OrbState.PERMISSION_REQUIRED -> {
+
+                    /*
+                     * Permission state remains calm but slightly
+                     * more attentive than idle.
+                     */
+                    val permissionWave =
+                        sin(
+                            elapsedSeconds *
+                                1.25f +
+                                particle.phase
+                        )
+
+                    particle.angle +=
+                        permissionWave *
+                        0.018f *
+                        dt
+                }
+            }
 
             /*
              * Audio adds a restrained radial pulse.
@@ -538,11 +804,74 @@ class OrbParticleSystem(
                     )
             }
 
+        /*
+         * Uniform-ish spherical distribution.
+         *
+         * cos(phi) is sampled uniformly so particles do not
+         * bunch toward the poles.
+         */
+        val theta =
+            random.nextFloat() *
+                (Math.PI.toFloat() * 2f)
+
+        /*
+         * Uniform angular distribution on the sphere.
+         *
+         * Sampling cos(phi) rather than phi directly prevents
+         * artificial particle concentration at the poles.
+         */
+        val cosPhi =
+            random.nextFloatBetween(
+                -1f,
+                1f
+            )
+
+        val phi =
+            kotlin.math.acos(
+                cosPhi
+            )
+
+        /*
+         * Volumetric radial distribution.
+         *
+         * The cube-root transform prevents particles from
+         * collapsing toward the center while still keeping
+         * substantially more particles inside the visible volume.
+         *
+         * Different layers occupy slightly different depth bands:
+         *
+         * MICRO  -> dense inner volume
+         * ORBIT  -> primary visible body
+         * LARGE  -> sparse outer accents
+         */
+        val volumeSample =
+            kotlin.math.cbrt(
+                random.nextFloat()
+            )
+
+        val sphericalRadius =
+            when (layer) {
+
+                Layer.MICRO ->
+                    0.62f +
+                        volumeSample *
+                        0.40f
+
+                Layer.ORBIT ->
+                    0.78f +
+                        volumeSample *
+                        0.32f
+
+                Layer.LARGE ->
+                    0.94f +
+                        volumeSample *
+                        0.22f
+            }
+
         return Particle(
 
             angle =
-                random.nextFloat() *
-                    (Math.PI.toFloat() * 2f),
+                theta,
 
             orbitRadius =
                 orbitRadius,
@@ -589,8 +918,72 @@ class OrbParticleSystem(
                     (Math.PI.toFloat() * 2f),
 
             layer =
-                layer
+                layer,
+
+            theta =
+                theta,
+
+            phi =
+                phi,
+
+            sphericalRadius =
+                sphericalRadius
         )
+    }
+
+    /**
+     * Resolve the particle's normalized 3D spherical position.
+     *
+     * Returns:
+     *   x, y, z
+     *
+     * The returned coordinates are normalized around the unit sphere.
+     */
+    /**
+     * Resolve normalized spherical coordinates without allocation.
+     *
+     * The renderer provides a reusable destination array.
+     *
+     * dst[0] = x
+     * dst[1] = y
+     * dst[2] = z
+     */
+    fun sphericalPosition(
+        particle: Particle,
+        dst: FloatArray
+    ) {
+
+        require(dst.size >= 3) {
+            "sphericalPosition destination must contain at least 3 values."
+        }
+
+        val sinPhi =
+            kotlin.math.sin(
+                particle.phi
+            )
+
+        val cosPhi =
+            kotlin.math.cos(
+                particle.phi
+            )
+
+        dst[0] =
+            kotlin.math.cos(
+                particle.theta
+            ) *
+                sinPhi *
+                particle.sphericalRadius
+
+        dst[1] =
+            cosPhi *
+                particle.sphericalRadius
+
+        dst[2] =
+            kotlin.math.sin(
+                particle.theta
+            ) *
+                sinPhi *
+                particle.sphericalRadius
     }
 
     /**

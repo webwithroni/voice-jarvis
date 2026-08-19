@@ -20,6 +20,20 @@
     android:paddingBottom="12dp">
 
     <!-- ================================================= -->
+    <!-- CINEMATIC VISUAL ENVIRONMENT                       -->
+    <!-- ================================================= -->
+
+    <com.webwithroni.voicejarvis.JarvisHomeVisualShell
+        android:id="@+id/homeVisualShell"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- ================================================= -->
     <!-- HEADER                                             -->
     <!-- ================================================= -->
 
@@ -50,22 +64,31 @@
             <TextView
                 android:id="@+id/brandTitle"
 
-                style="@style/VJTextTitle"
-
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
 
                 android:text="JARVIS"
 
-                android:letterSpacing="0.16" />
+                android:textColor="@color/vj_text_primary"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"
+
+                android:includeFontPadding="false"
+                android:letterSpacing="0.20" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="30dp"
 
-                android:layout_marginTop="3dp"
+                android:layout_marginTop="7dp"
+
+                android:paddingStart="10dp"
+                android:paddingEnd="11dp"
 
                 android:gravity="center_vertical"
+
+                android:background="@drawable/vj_header_status_glass"
 
                 android:orientation="horizontal">
 
@@ -75,7 +98,7 @@
                     android:layout_width="6dp"
                     android:layout_height="6dp"
 
-                    android:background="@drawable/bg_avatar_jarvis" />
+                    android:background="@drawable/vj_connection_dot" />
 
                 <TextView
                     android:id="@+id/connectionLabel"
@@ -85,13 +108,15 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
 
-                    android:layout_marginStart="6dp"
+                    android:layout_marginStart="7dp"
 
                     android:text="VOICE • READY"
 
-                    android:textColor="@color/vj_text_secondary"
+                    android:textColor="@color/vj_cyan"
 
-                    android:letterSpacing="0.06" />
+                    android:textStyle="bold"
+
+                    android:letterSpacing="0.08" />
 
             </LinearLayout>
 
@@ -100,36 +125,44 @@
         <ImageButton
             android:id="@+id/historyButton"
 
-            android:layout_width="@dimen/vj_icon_button_size"
-            android:layout_height="@dimen/vj_icon_button_size"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
 
-            android:background="@drawable/vj_icon_button_background"
+            android:background="@drawable/vj_glass_icon_button"
 
             android:contentDescription="Conversation history"
 
-            android:padding="11dp"
+            android:padding="13dp"
+
+            android:scaleType="centerInside"
 
             android:src="@drawable/ic_history"
 
-            android:tint="@color/vj_text_primary" />
+            android:tint="@color/vj_text_primary"
+
+            android:foreground="?attr/selectableItemBackgroundBorderless" />
 
         <ImageButton
             android:id="@+id/settingsButton"
 
-            android:layout_width="@dimen/vj_icon_button_size"
-            android:layout_height="@dimen/vj_icon_button_size"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
 
             android:layout_marginStart="8dp"
 
-            android:background="@drawable/vj_icon_button_background"
+            android:background="@drawable/vj_glass_icon_button"
 
             android:contentDescription="Settings"
 
-            android:padding="11dp"
+            android:padding="13dp"
+
+            android:scaleType="centerInside"
 
             android:src="@drawable/ic_settings"
 
-            android:tint="@color/vj_text_primary" />
+            android:tint="@color/vj_text_primary"
+
+            android:foreground="?attr/selectableItemBackgroundBorderless" />
 
     </LinearLayout>
 
@@ -359,7 +392,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <LinearLayout
+        <com.webwithroni.voicejarvis.JarvisGlassSurface
             android:id="@+id/homeHistoryHint"
 
             android:layout_width="0dp"
@@ -367,44 +400,52 @@
 
             android:layout_weight="1"
 
-            android:background="@drawable/vj_button_secondary"
-
             android:clickable="true"
             android:focusable="true"
 
             android:gravity="center">
 
-            <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
 
-                android:src="@drawable/ic_history"
+                android:gravity="center"
 
-                android:tint="@color/vj_text_primary" />
+                android:orientation="horizontal">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
 
-                android:layout_marginStart="7dp"
+                    android:src="@drawable/ic_history"
 
-                android:text="HISTORY"
+                    android:tint="@color/vj_text_primary" />
 
-                android:textColor="@color/vj_text_primary"
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
 
-                android:textSize="12sp"
+                    android:layout_marginStart="7dp"
 
-                android:textStyle="bold"
+                    android:text="HISTORY"
 
-                android:letterSpacing="0.06" />
+                    android:textColor="@color/vj_text_primary"
 
-        </LinearLayout>
+                    android:textSize="12sp"
+
+                    android:textStyle="bold"
+
+                    android:letterSpacing="0.06" />
+
+            </LinearLayout>
+
+        </com.webwithroni.voicejarvis.JarvisGlassSurface>
 
         <Space
             android:layout_width="8dp"
             android:layout_height="1dp" />
 
-        <LinearLayout
+        <com.webwithroni.voicejarvis.JarvisGlassSurface
             android:id="@+id/homeToolsHint"
 
             android:layout_width="0dp"
@@ -412,38 +453,46 @@
 
             android:layout_weight="1"
 
-            android:background="@drawable/vj_button_secondary"
-
             android:clickable="true"
             android:focusable="true"
 
             android:gravity="center">
 
-            <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
 
-                android:src="@drawable/ic_accessibility"
+                android:gravity="center"
 
-                android:tint="@color/vj_text_primary" />
+                android:orientation="horizontal">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
 
-                android:layout_marginStart="7dp"
+                    android:src="@drawable/ic_accessibility"
 
-                android:text="TOOLS"
+                    android:tint="@color/vj_text_primary" />
 
-                android:textColor="@color/vj_text_primary"
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
 
-                android:textSize="12sp"
+                    android:layout_marginStart="7dp"
 
-                android:textStyle="bold"
+                    android:text="TOOLS"
 
-                android:letterSpacing="0.06" />
+                    android:textColor="@color/vj_text_primary"
 
-        </LinearLayout>
+                    android:textSize="12sp"
+
+                    android:textStyle="bold"
+
+                    android:letterSpacing="0.06" />
+
+            </LinearLayout>
+
+        </com.webwithroni.voicejarvis.JarvisGlassSurface>
 
     </LinearLayout>
 
@@ -453,7 +502,7 @@
 
     <!-- Permission overlay -->
 
-    <LinearLayout
+    <com.webwithroni.voicejarvis.JarvisGlassSurface
         android:id="@+id/permissionCard"
 
         android:layout_width="0dp"
@@ -461,8 +510,6 @@
 
         android:layout_marginStart="12dp"
         android:layout_marginEnd="12dp"
-
-        android:background="@drawable/vj_card_background"
 
         android:gravity="center"
 
@@ -523,7 +570,7 @@
 
             android:text="ENABLE MICROPHONE" />
 
-    </LinearLayout>
+    </com.webwithroni.voicejarvis.JarvisGlassSurface>
 
     <!-- Conversation surface -->
 
@@ -538,7 +585,7 @@
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
 
-        android:background="@drawable/vj_card_background"
+        android:background="@drawable/vj_cinematic_conversation_surface"
 
         android:fillViewport="false"
 

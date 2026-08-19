@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+    <title>JARVIS — Google Sign-In</title>
+
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background: #07090D;
+            color: #F4F7FB;
+            font-family:
+                Inter,
+                system-ui,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+        }
+
+        .shell {
+            width: min(420px, calc(100vw - 40px));
+            text-align: center;
+        }
+
+        .logo {
+            width: 84px;
+            height: 84px;
+            margin: 0 auto 24px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            border: 1px solid rgba(92, 231, 255, 0.25);
+            background: radial-gradient(
+                circle,
+                rgba(92, 231, 255, 0.18),
+                rgba(7, 9, 13, 0.2) 60%
+            );
+            color: #5CE7FF;
+            font-size: 34px;
+        }
+
+        .eyebrow {
+            margin-bottom: 10px;
+            color: #5CE7FF;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .16em;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 30px;
+            line-height: 1.15;
+        }
+
+        p {
+            margin: 12px 0 28px;
+            color: #8C97A8;
+            line-height: 1.55;
+        }
+
+        button {
+            width: 100%;
+            min-height: 52px;
+            border: 0;
+            border-radius: 16px;
+            background: #5CE7FF;
+            color: #07090D;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: .55;
+            cursor: wait;
+        }
+
+        #status {
+            min-height: 20px;
+            margin-top: 16px;
+            font-size: 12px;
+            color: #566171;
+        }
+
+        .user {
+            margin-top: 20px;
+            padding: 16px;
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 18px;
+            background: #0D1118;
+            display: none;
+        }
+
+        .user strong {
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        .user span {
+            color: #8C97A8;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="shell">
+    <div class="logo">◉</div>
+
+    <div class="eyebrow">PERSONAL VOICE INTELLIGENCE</div>
+
+    <h1>Continue to JARVIS</h1>
+
+    <p>
+        Sign in securely with your Google account.
+    </p>
+
+    <button id="googleButton">
+        Continue with Google
+    </button>
+
+    <div id="status">
+        Secure Google authentication
+    </div>
+
+    <div id="userCard" class="user">
+        <strong id="userName"></strong>
+        <span id="userEmail"></span>
+    </div>
+</div>
+
+<script type="module">
+    import {
+        initializeApp
+    } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+
+    import {
+        getAuth,
+        GoogleAuthProvider,
+        signInWithRedirect,
+        getRedirectResult,
+        onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+
+    const firebaseConfig = {
+        apiKey:
+            "AIzaSyCmO7nz75UF2AfqCrO3lO-hHmLRrQMPVG0",
+        authDomain:
+            "voice-jarvis-7c0ff.firebaseapp.com",
+        projectId:
+            "voice-jarvis-7c0ff",
+        storageBucket:
+            "voice-jarvis-7c0ff.firebasestorage.app",
+        messagingSenderId:
+            "218806291908",
+        appId:
+            "1:218806291908:web:b706e8d4a2e3856a14a891",
+        measurementId:
+            "G-FRVHQT2VEL"
+    };
+
+    const app = initializeApp(
+        firebaseConfig
+    );
+
+    const auth = getAuth(app);
+    const provider =
+        new GoogleAuthProvider();
+
+    const button =
+        document.getElementById(
+            "googleButton"
+        );
+
+    const status =
+        document.getElementById(
+            "status"
+        );
+
+    const userCard =
+        document.getElementById(
+            "userCard"
+        );
+
+    const userName =
+        document.getElementById(
+            "userName"
+        );
+
+    const userEmail =
+        document.getElementById(
+            "userEmail"
+        );
+
+    button.addEventListener(
+        "click",
+        async () => {
+
+            button.disabled = true;
+
+            status.textContent =
+                "Opening secure Google sign-in…";
+
+            try {
+                await signInWithRedirect(
+                    auth,
+                    provider
+                );
+            } catch (error) {
+
+                console.error(
+                    error
+                );
+
+                button.disabled = false;
+
+                status.textContent =
+                    error?.message ||
+                    "Google sign-in failed.";
+            }
+        }
+    );
+
+    try {
+        await getRedirectResult(auth);
+    } catch (error) {
+
+        console.error(
+            "Redirect result error:",
+            error
+        );
+
+        status.textContent =
+            error?.message ||
+            "Google sign-in could not be completed.";
+    }
+
+    onAuthStateChanged(
+        auth,
+        (user) => {
+
+            if (!user) {
+                return;
+            }
+
+            button.style.display =
+                "none";
+
+            userCard.style.display =
+                "block";
+
+            userName.textContent =
+                user.displayName ||
+                "Google user";
+
+            userEmail.textContent =
+                user.email ||
+                "";
+
+            status.textContent =
+                "Google authentication successful.";
+        }
+    );
+</script>
+</body>
+</html>
