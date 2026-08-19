@@ -144,4 +144,4 @@ jobs:
             -no-snapshot-load
           disable-animations: true
           script: |
-            gradle connectedDebugAndroidTest --stacktrace\n
+            gradle connectedDebugAndroidTest --stacktrace
