@@ -223,6 +223,13 @@ class JarvisService : Service() {
         JarvisState.THINKING
         private set
 
+    @Volatile
+    private var runtimeState =
+        JarvisRuntimeState()
+
+    private val runtimeStateLock =
+        Any()
+
     var currentLabel =
         "CONNECTING"
         private set
@@ -284,6 +291,10 @@ class JarvisService : Service() {
     override fun onCreate() {
 
         super.onCreate()
+
+        reduceRuntime(
+            JarvisRuntimeEvent.ServiceStarted
+        )
 
         createNotificationChannel()
 
@@ -739,6 +750,10 @@ class JarvisService : Service() {
 
     private fun connectGemini() {
 
+        reduceRuntime(
+            JarvisRuntimeEvent.ConnectRequested
+        )
+
         val apiKey =
             BuildConfig.GEMINI_API_KEY
 
@@ -784,6 +799,10 @@ class JarvisService : Service() {
 
                         log(
                             "Gemini 3.1 Live connected."
+                        )
+
+                        reduceRuntime(
+                            JarvisRuntimeEvent.Connected
                         )
 
                         FirebasePerformanceManager
@@ -1546,6 +1565,10 @@ class JarvisService : Service() {
 
                     handler.post {
 
+                        reduceRuntime(
+                            JarvisRuntimeEvent.ConnectionLost
+                        )
+
                         consecutiveFailures++
 
                         if (
@@ -1559,6 +1582,10 @@ class JarvisService : Service() {
                             !isPaused &&
                             !inFallbackMode
                         ) {
+
+                            reduceRuntime(
+                                JarvisRuntimeEvent.ReconnectRequested
+                            )
 
                             pushState(
                                 JarvisState.THINKING,
@@ -1993,6 +2020,12 @@ class JarvisService : Service() {
                     SystemClockCompat.elapsedRealtime()
             )
 
+        reduceRuntime(
+            JarvisRuntimeEvent.ConfirmationRequested(
+                request.action
+            )
+        )
+
         log(
             "Confirmation required for: ${request.action}"
         )
@@ -2014,6 +2047,10 @@ class JarvisService : Service() {
     private fun clearPendingConfirmation() {
 
         pendingConfirmation = null
+
+        reduceRuntime(
+            JarvisRuntimeEvent.ConfirmationCleared
+        )
     }
 
     private fun isAffirmativeConfirmation(
@@ -2107,6 +2144,10 @@ class JarvisService : Service() {
             clearPendingConfirmation()
 
             clearOrbConfirmationActivity()
+
+            reduceRuntime(
+                JarvisRuntimeEvent.ConfirmationExpired
+            )
 
             pushState(
                 JarvisState.LISTENING,
@@ -2711,9 +2752,39 @@ class JarvisService : Service() {
         noMoreAudioIncoming =
             true
 
+        reduceRuntime(
+            JarvisRuntimeEvent.Interrupted
+        )
+
         pushState(
             JarvisState.LISTENING,
             "LISTENING",
+            "I'm listening."
+        )
+    }
+
+    fun cancelCurrentTurn() {
+
+        if (isPaused) {
+            return
+        }
+
+        audioEngine.clearPlaybackQueue()
+        audioEngine.micSendEnabled = true
+        noMoreAudioIncoming = true
+        latestUserTranscript = ""
+        latestJarvisTranscript = ""
+        firebaseTurnStartedAt = 0L
+        clearPendingConfirmation()
+        clearOrbConfirmationActivity()
+
+        reduceRuntime(
+            JarvisRuntimeEvent.Cancelled
+        )
+
+        pushState(
+            JarvisState.LISTENING,
+            "CANCELLED",
             "I'm listening."
         )
     }
@@ -2723,6 +2794,29 @@ class JarvisService : Service() {
         label: String,
         sub: String
     ) {
+
+        val event =
+            when (state) {
+                JarvisState.LISTENING,
+                JarvisState.HEARING ->
+                    JarvisRuntimeEvent.ListeningStarted
+
+                JarvisState.THINKING ->
+                    JarvisRuntimeEvent.ThinkingStarted
+
+                JarvisState.SPEAKING ->
+                    JarvisRuntimeEvent.ResponseStarted
+
+                JarvisState.PAUSED ->
+                    JarvisRuntimeEvent.Paused
+
+                JarvisState.ERROR ->
+                    JarvisRuntimeEvent.Failed(
+                        sub.ifBlank { label }
+                    )
+            }
+
+        reduceRuntime(event)
 
         currentState =
             state
@@ -2742,6 +2836,18 @@ class JarvisService : Service() {
         updateNotification(
             label
         )
+    }
+
+    private fun reduceRuntime(
+        event: JarvisRuntimeEvent
+    ) {
+        synchronized(runtimeStateLock) {
+            runtimeState =
+                JarvisRuntimeReducer.reduce(
+                    runtimeState,
+                    event
+                )
+        }
     }
 
     private fun updateMicAmplitude(
@@ -2908,7 +3014,24 @@ class JarvisService : Service() {
             userText,
             jarvisText
         )
+
+        userText?.let {
+            reduceRuntime(
+                JarvisRuntimeEvent.UserTranscriptUpdated(it)
+            )
+        }
+
+        jarvisText?.let {
+            reduceRuntime(
+                JarvisRuntimeEvent.AssistantTranscriptUpdated(it)
+            )
+        }
     }
+
+    fun getRuntimeState(): JarvisRuntimeState =
+        synchronized(runtimeStateLock) {
+            runtimeState
+        }
 
     fun getLastConversation():
         Pair<String?, String?> =
@@ -3098,6 +3221,10 @@ class JarvisService : Service() {
     override fun onDestroy() {
 
         clearPendingConfirmation()
+
+        reduceRuntime(
+            JarvisRuntimeEvent.ServiceStopped
+        )
 
         super.onDestroy()
 
