@@ -793,6 +793,11 @@ class JarvisService : Service() {
                         this@JarvisService
                     ),
 
+                model =
+                    ModelPreferences.getSelectedModel(
+                        this@JarvisService
+                    ),
+
                 onSetupComplete = {
 
                     handler.post {

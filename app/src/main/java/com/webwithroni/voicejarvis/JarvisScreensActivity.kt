@@ -1464,6 +1464,25 @@ class JarvisScreensActivity : AppCompatActivity() {
             )
         )
 
+        val selectedModel =
+            ModelPreferences.getSelectedModelInfo(
+                this
+            )
+
+        body.addView(
+            actionRow(
+                R.drawable.ic_jarvis_logo,
+                "Live model",
+                "${selectedModel.label} • ${selectedModel.description}",
+                blue
+            ) {
+                showModelPicker()
+            },
+            lp(
+                bottom = 10
+            )
+        )
+
         body.addView(
             actionRow(
                 R.drawable.ic_mic,
@@ -1700,6 +1719,34 @@ class JarvisScreensActivity : AppCompatActivity() {
         setContentView(
             page
         )
+    }
+
+    private fun showModelPicker() {
+        val models = ModelCatalog.all
+        val selectedId = ModelPreferences.getSelectedModel(this)
+        var checkedIndex = models.indexOfFirst { it.id == selectedId }
+            .coerceAtLeast(0)
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Choose live model")
+            .setSingleChoiceItems(
+                models.map { it.label }.toTypedArray(),
+                checkedIndex
+            ) { _, which ->
+                checkedIndex = which
+            }
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ ->
+                val selected = models[checkedIndex]
+                if (ModelPreferences.setSelectedModel(this, selected.id)) {
+                    Toast.makeText(
+                        this,
+                        "${selected.label} selected for the next voice session.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            .show()
     }
 
 

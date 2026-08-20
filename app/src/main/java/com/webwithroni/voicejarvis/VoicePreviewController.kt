@@ -201,6 +201,11 @@ class VoicePreviewController(
                 voiceName =
                     voice.id,
 
+                model =
+                    ModelPreferences.getSelectedModel(
+                        appContext
+                    ),
+
                 onSetupComplete = {
 
                     handler.post {
